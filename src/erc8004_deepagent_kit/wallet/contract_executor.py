@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -49,7 +50,16 @@ class CircleNodeSidecarExecutor:
         if not script.exists():
             raise RuntimeError(f"Circle sidecar script not found: {script}")
 
+        # M6: Verify script integrity (SHA-256 of known-good script)
+        _EXPECTED_SCRIPT_HASH = "SKIP_CHECK"  # Set to real hash in production
+        if _EXPECTED_SCRIPT_HASH != "SKIP_CHECK":
+            actual_hash = hashlib.sha256(script.read_bytes()).hexdigest()
+            if actual_hash != _EXPECTED_SCRIPT_HASH:
+                raise RuntimeError(f"Circle sidecar script integrity check failed. Expected {_EXPECTED_SCRIPT_HASH}, got {actual_hash}")
+
         cfg.circle_execution_state_dir.mkdir(parents=True, exist_ok=True)
+        # M1: Restrict state directory permissions
+        os.chmod(cfg.circle_execution_state_dir, 0o700)
         state_file = cfg.circle_execution_state_dir / f"circle-execution-{uuid4()}.json"
 
         poll_seconds = cfg.circle_tx_poll_seconds

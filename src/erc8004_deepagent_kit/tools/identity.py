@@ -280,17 +280,27 @@ def register_identity_once(agent_key: str | None = None, name: str | None = None
     return _register_identity_once_impl(agent_key=agent_key, name=name, description=description, image=image)
 
 
+def _parse_agent_id(agent_id: str) -> int:
+    """Validate and convert agent_id string to int. Raises ValueError on bad input."""
+    try:
+        return int(agent_id)
+    except (ValueError, TypeError):
+        raise ValueError(f"agent_id must be a numeric token ID, got: {agent_id!r}")
+
+
 @tool
 def get_agent_metadata(agent_id: str) -> dict:
     """Read tokenURI metadata for an ERC-8004 agent ID."""
+    aid = _parse_agent_id(agent_id)
     client = _identity_client()
-    token_uri = client.contract.functions.tokenURI(int(agent_id)).call()
-    owner = client.contract.functions.ownerOf(int(agent_id)).call()
+    token_uri = client.contract.functions.tokenURI(aid).call()
+    owner = client.contract.functions.ownerOf(aid).call()
     return {"agent_id": agent_id, "owner": Web3.to_checksum_address(owner), "agent_uri": token_uri}
 
 
 @tool
 def get_agent_wallet(agent_id: str) -> dict:
     """Read ERC-8004 agentWallet for an agent ID when the registry exposes getAgentWallet."""
+    _parse_agent_id(agent_id)  # validate before calling
     wallet = _identity_client().get_agent_wallet(agent_id)
     return {"agent_id": agent_id, "agent_wallet": wallet}

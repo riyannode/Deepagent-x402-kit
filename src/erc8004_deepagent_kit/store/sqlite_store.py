@@ -154,6 +154,11 @@ class SqliteIdentityStore:
         now_s = datetime.now(timezone.utc).isoformat()
         with self._connect() as conn:
             cur = conn.execute("DELETE FROM registration_locks WHERE expires_at < ?", (now_s,))
+            # L4: Periodic WAL checkpoint to prevent unbounded WAL growth
+            try:
+                conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+            except Exception:
+                pass  # checkpoint is best-effort
             return int(cur.rowcount or 0)
 
     def save(self, *, chain_id: int, identity_registry: str, agent_key: str, wallet_address: str, agent_id: str, agent_uri: str, tx_hash: str, source: str) -> StoredIdentity:

@@ -6,6 +6,7 @@ from typing import Any
 
 from web3 import Web3
 from web3.exceptions import TransactionNotFound
+from web3.exceptions import ContractLogicError
 
 from .abi_identity import IDENTITY_REGISTRY_ABI
 from .abi_validation import VALIDATION_REGISTRY_ABI
@@ -52,7 +53,7 @@ class IdentityRegistryClient:
     def _token_uri(self, agent_id: str) -> str | None:
         try:
             return self.contract.functions.tokenURI(int(agent_id)).call()
-        except Exception:
+        except (ContractLogicError, ValueError):
             return None
 
     def _identity_from_event(self, event: MintEvent, *, duplicate_count: int = 0) -> OnchainIdentity:
@@ -66,6 +67,13 @@ class IdentityRegistryClient:
             duplicate_count=duplicate_count,
         )
 
+    def _balance_of(self, owner: str) -> int:
+        """Fast check: how many identity tokens does this wallet own?"""
+        try:
+            return int(self.contract.functions.balanceOf(Web3.to_checksum_address(owner)).call())
+        except (ContractLogicError, ValueError):
+            return -1
+
     def find_registered_by_owner(self, owner: str) -> OnchainIdentity | None:
         owner = Web3.to_checksum_address(owner)
         latest = self._latest_block()
@@ -74,8 +82,18 @@ class IdentityRegistryClient:
         to_topic = address_topic(owner)
         zero_topic = address_topic(ZERO_ADDRESS)
 
+        # Fast path: skip event scan if wallet owns zero tokens
+        balance = self._balance_of(owner)
+        if balance == 0:
+            return None
+
         if from_block > latest:
             return None
+
+        # Auto-narrow scan range: start from recent blocks if from_block is too old
+        max_scan_blocks = self.block_range * 50  # max 500k blocks
+        if latest - from_block > max_scan_blocks:
+            from_block = latest - max_scan_blocks
 
         while from_block <= latest:
             to_block = min(latest, from_block + self.block_range - 1)
@@ -150,7 +168,7 @@ class IdentityRegistryClient:
     def get_agent_wallet(self, agent_id: str) -> str | None:
         try:
             return self.contract.functions.getAgentWallet(int(agent_id)).call()
-        except Exception:
+        except (ContractLogicError, ValueError):
             return None
 
 

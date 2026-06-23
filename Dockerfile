@@ -27,6 +27,12 @@ RUN pip install --upgrade pip \
     && npm ci --omit=dev \
     && chmod +x /app/docker-entrypoint.sh
 
+# L3: Non-root user for production safety
+RUN useradd -m -r -s /bin/false appuser \
+    && chown -R appuser:appuser /app \
+    && mkdir -p /data && chown -R appuser:appuser /data
+
 VOLUME ["/data"]
+USER appuser
 ENTRYPOINT ["/app/docker-entrypoint.sh"]
 CMD ["doctor"]

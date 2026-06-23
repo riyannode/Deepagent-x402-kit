@@ -47,4 +47,6 @@ def build_registration_file(
 
 def to_data_uri(registration_file: dict[str, Any]) -> str:
     raw = json.dumps(registration_file, separators=(",", ":"), sort_keys=True).encode("utf-8")
+    if len(raw) > 32768:
+        raise ValueError(f"registration file exceeds 32KB limit ({len(raw)} bytes). Truncate description or services.")
     return "data:application/json;base64," + base64.b64encode(raw).decode("ascii")

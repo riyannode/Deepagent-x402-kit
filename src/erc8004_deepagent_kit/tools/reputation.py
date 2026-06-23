@@ -49,6 +49,16 @@ def get_feedback_for_agent(agent_id: str) -> dict:
 @tool
 def record_reputation_feedback(agent_id: str, score: int, feedback_type: int, tag: str, metadata_uri: str = "", evidence_uri: str = "", comment: str = "") -> dict:
     """Policy-gated ERC-8004 reputation write through Circle DCW. Disabled unless ENABLE_REPUTATION_WRITES=true."""
+    # Validate ranges before submission
+    if not (-2**127 <= score < 2**127):
+        raise ValueError(f"score out of int128 range: {score}")
+    if not (0 <= feedback_type <= 255):
+        raise ValueError(f"feedback_type out of uint8 range: {feedback_type}")
+    try:
+        int(agent_id)
+    except (ValueError, TypeError):
+        raise ValueError(f"agent_id must be a numeric token ID, got: {agent_id!r}")
+
     cfg = load_config()
     wallet = get_configured_wallet()
     feedback_hash = to_hex(keccak(text=tag))

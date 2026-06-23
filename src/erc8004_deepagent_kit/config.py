@@ -102,7 +102,14 @@ class KitConfig:
         return bool(self.circle_api_key and self.circle_entity_secret and self.dcw_wallet_address)
 
 
+_cached_config: KitConfig | None = None
+
+
 def load_config(env_file: str | None = None) -> KitConfig:
+    global _cached_config
+    if _cached_config is not None:
+        return _cached_config
+
     load_dotenv(env_file or ".env", override=False)
 
     identity_registry = _require_address(
@@ -143,7 +150,7 @@ def load_config(env_file: str | None = None) -> KitConfig:
     if len(agent_key) > 128:
         raise ValueError("AGENT_KEY must be <= 128 characters")
 
-    return KitConfig(
+    result = KitConfig(
         network_profile=_env("NETWORK_PROFILE", "arc-testnet") or "arc-testnet",
         chain_id=_env_int("CHAIN_ID", 5042002, min_value=1),
         blockchain=_env("BLOCKCHAIN", "ARC-TESTNET") or "ARC-TESTNET",
@@ -171,7 +178,7 @@ def load_config(env_file: str | None = None) -> KitConfig:
         circle_fee_level=fee_level,
         circle_tx_poll_seconds=_env_int("CIRCLE_TX_POLL_SECONDS", 5, min_value=1, max_value=60),
         circle_tx_max_polls=_env_int("CIRCLE_TX_MAX_POLLS", 180, min_value=1, max_value=300),
-        registration_lock_ttl_seconds=_env_int("REGISTRATION_LOCK_TTL_SECONDS", 7200, min_value=300, max_value=86400),
+        registration_lock_ttl_seconds=_env_int("REGISTRATION_LOCK_TTL_SECONDS", 300, min_value=60, max_value=86400),
         verify_chain_id=_env_bool("VERIFY_CHAIN_ID", True),
         expose_reputation_write_tools_to_agent=_env_bool("EXPOSE_REPUTATION_WRITE_TOOLS_TO_AGENT", False),
         expose_validation_write_tools_to_agent=_env_bool("EXPOSE_VALIDATION_WRITE_TOOLS_TO_AGENT", False),
@@ -179,3 +186,5 @@ def load_config(env_file: str | None = None) -> KitConfig:
         receipt_max_polls=_env_int("RECEIPT_MAX_POLLS", 60, min_value=1, max_value=300),
         circle_execution_state_dir=Path(_env("CIRCLE_EXECUTION_STATE_DIR", "/data/circle_executions") or "/data/circle_executions"),
     )
+    _cached_config = result
+    return result

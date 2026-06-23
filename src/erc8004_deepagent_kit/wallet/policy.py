@@ -26,6 +26,11 @@ class WalletPolicy:
         sig = intent.abi_function_signature.strip()
 
         if contract == self.identity_registry and sig == "register(string)":
+            # M5: Validate agent_uri parameter format
+            if intent.abi_parameters and isinstance(intent.abi_parameters[0], str):
+                uri = intent.abi_parameters[0]
+                if not uri.startswith("data:application/json;base64,"):
+                    raise PermissionError(f"register(string) agent_uri must be a data: URI, got: {uri[:50]}...")
             return
 
         if contract == self.reputation_registry and sig == "giveFeedback(uint256,int128,uint8,string,string,string,string,bytes32)":

@@ -32,6 +32,11 @@ def get_validation_status(request_hash: str) -> dict:
 @tool
 def request_validation(validator_address: str, agent_id: str, request_uri: str, request_tag: str) -> dict:
     """Policy-gated ERC-8004 validationRequest write through Circle DCW. Disabled unless ENABLE_VALIDATION_WRITES=true."""
+    try:
+        int(agent_id)
+    except (ValueError, TypeError):
+        raise ValueError(f"agent_id must be a numeric token ID, got: {agent_id!r}")
+
     cfg = load_config()
     wallet = get_configured_wallet()
     validator_address = Web3.to_checksum_address(validator_address)
@@ -58,6 +63,9 @@ def request_validation(validator_address: str, agent_id: str, request_uri: str, 
 @tool
 def submit_validation_response(request_hash: str, response: int, response_uri: str = "", response_tag: str = "validated") -> dict:
     """Policy-gated ERC-8004 validationResponse write through Circle DCW. Disabled unless ENABLE_VALIDATION_WRITES=true."""
+    if not (0 <= response <= 255):
+        raise ValueError(f"response out of uint8 range: {response}")
+
     cfg = load_config()
     wallet = get_configured_wallet()
     if not request_hash.startswith("0x") or len(request_hash) != 66:
