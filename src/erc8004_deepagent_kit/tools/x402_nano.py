@@ -18,7 +18,7 @@ from langchain_core.tools import tool
 
 from ..config import load_config
 from ..x402.ledger import X402Ledger
-from ..x402.policy import assert_amount_allowed, assert_url_allowed
+from ..x402.policy import assert_amount_allowed, assert_challenge_valid, assert_url_allowed
 
 ADDRESS_RE = re.compile(r"^0x[a-fA-F0-9]{40}$")
 
@@ -69,16 +69,37 @@ def x402_nano_pay(url: str, method: str = "GET") -> dict:
     host = urlparse(url).hostname or ""
     request_id = hashlib.sha256(f"nano:{url}:{method}:{agent_key}".encode()).hexdigest()[:16]
 
+    # Phase 1: prefetch the 402 challenge (no signing yet)
+    prefetch_result = _run({
+        "mode": "prefetch", "url": url, "method": method,
+    })
+
+    if not prefetch_result.get("paymentRequired"):
+        return prefetch_result
+
+    challenge = prefetch_result.get("challenge")
+    if not challenge:
+        raise RuntimeError("x402: prefetch returned no challenge")
+
+    # Phase 2: validate challenge in Python BEFORE any signing
+    accept = assert_challenge_valid(challenge, url)
+
+    # Pre-validate amount against per-request max
+    amount_atomic = accept.get("amount", str(int(float(cfg.x402_max_per_request_usdc) * 1e6)))
+    assert_amount_allowed(str(amount_atomic))
+
     row_id = ledger.insert_pending(
         mode="nano", agent_key=agent_key, wallet_id=buyer_wallet_id,
         host=host, resource=url, request_id=request_id,
-        amount_atomic=str(int(float(cfg.x402_max_per_request_usdc) * 1e6)),
+        amount_atomic=str(amount_atomic),
     )
 
     try:
+        # Phase 3: sign and retry with pre-validated challenge
         result = _run({
             "mode": "pay", "url": url, "walletId": buyer_wallet_id,
             "maxAmountUsdc": cfg.x402_max_per_request_usdc, "method": method,
+            "challenge": challenge,
         })
         ledger.update_status(row_id, "success")
         result["ledger_row_id"] = row_id

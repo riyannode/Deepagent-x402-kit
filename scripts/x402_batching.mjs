@@ -5,9 +5,10 @@
  * Designed for high-frequency agent commerce.
  *
  * Modes:
- *   pay    — Buyer: 402 challenge → DCW signTypedData → retry with payment
- *   sell   — Seller: verify + settle via BatchFacilitatorClient
- *   balance — Gateway balance check
+ *   prefetch — Buyer: fetch URL, get 402 challenge, return it (no signing)
+ *   pay      — Buyer: sign pre-validated challenge → retry with payment
+ *   sell     — Seller: verify + settle via BatchFacilitatorClient
+ *   balance  — Gateway balance check
  *
  * Stdin JSON: { mode, ...mode-specific }
  * All secrets from env. No raw private keys.
@@ -57,22 +58,50 @@ async function checkBalance(addr) {
 
 // ── Buyer ────────────────────────────────────────────────────────
 
-async function pay(input) {
-  const { url, walletId, maxAmountUsdc, method } = input;
+/** Prefetch: fetch URL, get 402 challenge, return it without signing. */
+async function prefetch(input) {
+  const { url, method } = input;
   if (!url) throw new Error("url required");
-  if (!walletId) throw new Error("walletId required");
 
   const resp = await fetch(url, { method: method || "GET", headers: { "Content-Type": "application/json" } });
   if (resp.status !== 402) {
     const body = await resp.text();
-    return ok({ mode: "batch_pay", paymentRequired: false, httpStatus: resp.status, body: body.substring(0, 4096) });
+    return ok({ mode: "prefetch", paymentRequired: false, httpStatus: resp.status, body: body.substring(0, 4096) });
   }
 
   const header = resp.headers.get("payment-required");
   if (!header) throw new Error("402 but no PAYMENT-REQUIRED header");
   const challenge = JSON.parse(Buffer.from(header, "base64").toString("utf-8"));
-  const accept = challenge.accepts?.[0];
-  if (!accept) throw new Error("no accepts[] in challenge");
+  if (!challenge.accepts?.[0]) throw new Error("no accepts[] in challenge");
+
+  return ok({ mode: "prefetch", paymentRequired: true, challenge });
+}
+
+async function pay(input) {
+  const { url, walletId, maxAmountUsdc, method, challenge: preFetched } = input;
+  if (!url) throw new Error("url required");
+  if (!walletId) throw new Error("walletId required");
+
+  let challenge, accept;
+  if (preFetched) {
+    // Challenge already fetched and validated by Python layer
+    challenge = preFetched;
+    accept = challenge.accepts?.[0];
+    if (!accept) throw new Error("pre-fetched challenge has no accepts[]");
+  } else {
+    // Fetch the URL to get the 402 challenge
+    const resp = await fetch(url, { method: method || "GET", headers: { "Content-Type": "application/json" } });
+    if (resp.status !== 402) {
+      const body = await resp.text();
+      return ok({ mode: "batch_pay", paymentRequired: false, httpStatus: resp.status, body: body.substring(0, 4096) });
+    }
+
+    const header = resp.headers.get("payment-required");
+    if (!header) throw new Error("402 but no PAYMENT-REQUIRED header");
+    challenge = JSON.parse(Buffer.from(header, "base64").toString("utf-8"));
+    accept = challenge.accepts?.[0];
+    if (!accept) throw new Error("no accepts[] in challenge");
+  }
 
   const amountAtomic = accept.amount || "1";
   const maxAtomic = String(Math.floor(Number(maxAmountUsdc || "0.000001") * 1e6));
@@ -186,7 +215,8 @@ async function settle(input) {
 async function main() {
   const input = JSON.parse(await readStdin() || "{}");
   const { mode } = input;
-  if (!mode) throw new Error("mode: pay | sell | balance");
+  if (!mode) throw new Error("mode: prefetch | pay | sell | balance");
+  if (mode === "prefetch") return await prefetch(input);
   if (mode === "pay") return await pay(input);
   if (mode === "sell") return await settle(input);
   if (mode === "balance") {

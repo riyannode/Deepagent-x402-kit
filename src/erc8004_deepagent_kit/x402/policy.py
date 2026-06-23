@@ -79,9 +79,11 @@ def assert_url_allowed(url: str) -> None:
     if host in ("localhost", "0.0.0.0", "[::]"):
         raise PermissionError(f"x402: blocked host: {host}")
 
-    # Allowlist enforcement
+    # Allowlist enforcement — fail-closed: empty list means block everything
     allowed = _parse_allowed_hosts(cfg.x402_allowed_hosts)
-    if allowed and host not in allowed:
+    if not allowed:
+        raise PermissionError("x402: X402_ALLOWED_HOSTS must be non-empty for buyer payments")
+    if host not in allowed:
         raise PermissionError(f"x402: host {host!r} not in X402_ALLOWED_HOSTS")
 
 
@@ -126,34 +128,46 @@ def assert_challenge_valid(challenge: dict, expected_url: str) -> dict:
 
     accept = accepts[0]
 
-    # Network check
+    # Network check — must be Arc Testnet
     network = accept.get("network", "")
-    if network and network != "eip155:5042002":
-        raise PermissionError(f"x402: unsupported network: {network}")
+    if not network:
+        raise PermissionError("x402: challenge missing network field")
+    if network != "eip155:5042002":
+        raise PermissionError(f"x402: unsupported network: {network} (expected eip155:5042002)")
 
-    # Asset check (Arc USDC)
+    # Asset check — must be Arc USDC
     asset = accept.get("asset", "")
     expected_asset = "0x3600000000000000000000000000000000000000"
-    if asset and asset.lower() != expected_asset.lower():
-        raise PermissionError(f"x402: unexpected asset: {asset}")
+    if not asset:
+        raise PermissionError("x402: challenge missing asset field")
+    if asset.lower() != expected_asset.lower():
+        raise PermissionError(f"x402: unexpected asset: {asset} (expected {expected_asset})")
 
-    # Scheme check
+    # Scheme check — must be exact or exact_nano
     scheme = accept.get("scheme", "")
-    if scheme and scheme not in ("exact", "exact_nano"):
+    if not scheme:
+        raise PermissionError("x402: challenge missing scheme field")
+    if scheme not in ("exact", "exact_nano"):
         raise PermissionError(f"x402: unsupported scheme: {scheme}")
 
-    # Amount check
-    amount = accept.get("amount", "0")
+    # Amount check — must be within per-request limit
+    amount = accept.get("amount", "")
+    if not amount:
+        raise PermissionError("x402: challenge missing amount field")
     assert_amount_allowed(str(amount))
 
-    # payTo check
+    # payTo check — must be valid EVM address
     pay_to = accept.get("payTo", "")
-    if not pay_to or not pay_to.startswith("0x") or len(pay_to) != 42:
+    if not pay_to:
+        raise PermissionError("x402: challenge missing payTo field")
+    if not pay_to.startswith("0x") or len(pay_to) != 42:
         raise PermissionError(f"x402: invalid payTo: {pay_to}")
 
-    # Resource check — challenge resource should match requested URL
+    # Resource check — challenge resource must match requested URL
     resource = challenge.get("resource", "")
     if resource and resource != expected_url:
-        logger.warning("x402: challenge resource %r != requested URL %r", resource, expected_url)
+        raise PermissionError(
+            f"x402: challenge resource {resource!r} != requested URL {expected_url!r}"
+        )
 
     return accept

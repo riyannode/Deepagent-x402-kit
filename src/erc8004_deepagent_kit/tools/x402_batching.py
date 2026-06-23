@@ -77,24 +77,43 @@ def x402_batch_pay(url: str, method: str = "GET") -> dict:
     agent_key = cfg.agent_key
     ledger.check_daily_limits(agent_key, buyer_wallet_id)
 
-    # Pre-validate amount against per-request max
-    assert_amount_allowed(str(int(float(cfg.x402_max_per_request_usdc) * 1e6)))
-
     host = urlparse(url).hostname or ""
     resource = url
     request_id = hashlib.sha256(f"batch:{url}:{method}:{agent_key}".encode()).hexdigest()[:16]
+
+    # Phase 1: prefetch the 402 challenge (no signing yet)
+    prefetch_result = _run({
+        "mode": "prefetch", "url": url, "method": method,
+    })
+
+    if not prefetch_result.get("paymentRequired"):
+        # No payment needed — return the result directly
+        return prefetch_result
+
+    challenge = prefetch_result.get("challenge")
+    if not challenge:
+        raise RuntimeError("x402: prefetch returned no challenge")
+
+    # Phase 2: validate challenge in Python BEFORE any signing
+    accept = assert_challenge_valid(challenge, url)
+
+    # Pre-validate amount against per-request max
+    amount_atomic = accept.get("amount", str(int(float(cfg.x402_max_per_request_usdc) * 1e6)))
+    assert_amount_allowed(str(amount_atomic))
 
     # Insert pending ledger row
     row_id = ledger.insert_pending(
         mode="batching", agent_key=agent_key, wallet_id=buyer_wallet_id,
         host=host, resource=resource, request_id=request_id,
-        amount_atomic=str(int(float(cfg.x402_max_per_request_usdc) * 1e6)),
+        amount_atomic=str(amount_atomic),
     )
 
     try:
+        # Phase 3: sign and retry with pre-validated challenge
         result = _run({
             "mode": "pay", "url": url, "walletId": buyer_wallet_id,
             "maxAmountUsdc": cfg.x402_max_per_request_usdc, "method": method,
+            "challenge": challenge,
         })
         ledger.update_status(row_id, "success")
         result["ledger_row_id"] = row_id

@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import json
+import os
+import shutil
+import subprocess
 from pathlib import Path
 from typing import Optional
 
@@ -63,6 +66,75 @@ def doctor() -> None:
         _safe_check("identity_registry_bytecode", lambda: {"ok": client.contract_code_size() > 0, "bytes": client.contract_code_size()}),
         _safe_check("latest_block", lambda: {"ok": client.w3.eth.block_number >= cfg.from_block, "value": int(client.w3.eth.block_number), "from_block": cfg.from_block}),
     ]
+
+    # ── x402 checks ─────────────────────────────────────────────
+    if cfg.x402_enabled:
+        sdk_root = os.getenv("SDK_PROJECT_ROOT", "/app")
+
+        # Sidecar files exist
+        checks.append(_safe_check(
+            "x402_batching_sidecar_exists",
+            lambda: {"ok": (Path(sdk_root) / "scripts" / "x402_batching.mjs").is_file()},
+        ))
+        checks.append(_safe_check(
+            "x402_nano_sidecar_exists",
+            lambda: {"ok": (Path(sdk_root) / "scripts" / "x402_nano.mjs").is_file()},
+        ))
+
+        # If batching mode, check @circle-fin/x402-batching is importable
+        if cfg.x402_mode == "batching":
+            def _check_batching_pkg():
+                node = shutil.which("node")
+                if not node:
+                    return {"ok": False, "error": "node not found on PATH"}
+                r = subprocess.run(
+                    [node, "-e", "require('@circle-fin/x402-batching/server')"],
+                    capture_output=True, text=True, timeout=15,
+                )
+                return {"ok": r.returncode == 0, "error": r.stderr[:200] if r.returncode != 0 else None}
+            checks.append(_safe_check("x402_batching_package_importable", _check_batching_pkg))
+
+        # Gateway API URL configured
+        checks.append({
+            "name": "x402_gateway_api_url",
+            "ok": bool(cfg.x402_gateway_api_url),
+            "value": cfg.x402_gateway_api_url or "",
+            "required": True,
+        })
+
+        # Ledger path writable
+        def _check_ledger_writable():
+            ledger_dir = cfg.x402_ledger_path.parent
+            ledger_dir.mkdir(parents=True, exist_ok=True)
+            test_file = ledger_dir / ".doctor_write_test"
+            test_file.write_text("ok")
+            test_file.unlink()
+            return {"ok": True, "path": str(ledger_dir)}
+        checks.append(_safe_check("x402_ledger_path_writable", _check_ledger_writable))
+
+    # Buyer exposure checks
+    buyer_exposed = cfg.x402_expose_batch_buyer_to_agent or cfg.x402_expose_nano_buyer_to_agent
+    if buyer_exposed:
+        checks.append({
+            "name": "x402_buyer_wallet_id_required",
+            "ok": bool(cfg.x402_default_buyer_wallet_id),
+            "required": True,
+        })
+        checks.append({
+            "name": "x402_allowed_hosts_required",
+            "ok": bool(cfg.x402_allowed_hosts and cfg.x402_allowed_hosts.strip()),
+            "required": True,
+        })
+
+    # Seller exposure checks
+    seller_exposed = cfg.x402_expose_batch_seller_to_agent or cfg.x402_expose_nano_seller_to_agent
+    if seller_exposed:
+        checks.append({
+            "name": "x402_seller_wallet_address_required",
+            "ok": bool(cfg.x402_default_seller_wallet_address),
+            "required": True,
+        })
+
     ok = all(bool(c.get("ok")) for c in checks if c.get("required", True))
     _print({"ok": ok, "mode": "live_circle_only", "checks": checks, "sends_transaction": False})
     if not ok:

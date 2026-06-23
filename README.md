@@ -36,7 +36,7 @@ docker compose run --rm erc8004-live register
 
 ```bash
 erc8004-deepagent config              # Print safe config (no secrets)
-erc8004-deepagent doctor              # Validate env/RPC/contract/chain
+erc8004-deepagent doctor              # Validate env/RPC/contract/chain (+ x402 if X402_ENABLED)
 erc8004-deepagent status              # Check identity status (local + on-chain)
 erc8004-deepagent register            # Register one identity (idempotent)
 erc8004-deepagent clear-expired-locks # Clear stale registration locks
@@ -57,7 +57,9 @@ erc8004-deepagent agent-register      # Let the Deep Agent register via tools
 [ ] tx emits ERC-721 Transfer mint to DCW wallet
 [ ] SQLite has exactly one identity row
 [ ] second register returns already_registered (no new tx)
-[ ] if X402_ENABLED=true, doctor verifies sidecar files + ledger
+[ ] if X402_ENABLED=true, doctor checks: sidecar files, batching package, gateway URL, ledger writable
+[ ] if buyer exposed, doctor requires X402_DEFAULT_BUYER_WALLET_ID + X402_ALLOWED_HOSTS non-empty
+[ ] if seller exposed, doctor requires X402_DEFAULT_SELLER_WALLET_ADDRESS non-empty
 ```
 
 ## x402 Payment Tools
@@ -108,7 +110,10 @@ Tools exposed to agent:
 |---------|-------------|
 | Wallet from LLM | **Blocked** — always uses `X402_DEFAULT_BUYER_WALLET_ID` from env |
 | Max amount from LLM | **Blocked** — always enforces `X402_MAX_PER_REQUEST_USDC` from env |
-| Host allowlist | `X402_ALLOWED_HOSTS` — reject unknown hosts, localhost, private IPs |
+| Host allowlist | `X402_ALLOWED_HOSTS` — **fail-closed** (empty = block all) |
+| Challenge validation | Two-phase: prefetch → `assert_challenge_valid()` in Python → sign |
+| Network pinning | Only `eip155:5042002` (Arc Testnet) accepted |
+| Asset pinning | Only Arc USDC (`0x3600...0000`) accepted |
 | HTTPS | `X402_REQUIRE_HTTPS=true` — reject http:// |
 | Daily budget | `X402_MAX_DAILY_USDC` — SQLite ledger tracks cumulative spend |
 | Request count | `X402_MAX_REQUESTS_PER_DAY` — SQLite ledger tracks count |
@@ -137,6 +142,17 @@ X402_MODE=nano docker compose run --rm erc8004-live doctor
 # With x402 enabled
 X402_ENABLED=true X402_MODE=batching docker compose run --rm erc8004-live config
 ```
+
+### Doctor x402 Checks
+
+When `X402_ENABLED=true`, `erc8004-deepagent doctor` adds these checks (no transactions, no signing):
+
+- Sidecar files exist (`scripts/x402_batching.mjs`, `scripts/x402_nano.mjs`)
+- If `X402_MODE=batching`: `@circle-fin/x402-batching` package is importable
+- `X402_GATEWAY_API_URL` is configured
+- `X402_LEDGER_PATH` directory is writable
+- If buyer tools exposed: `X402_DEFAULT_BUYER_WALLET_ID` and `X402_ALLOWED_HOSTS` non-empty
+- If seller tools exposed: `X402_DEFAULT_SELLER_WALLET_ADDRESS` non-empty
 
 ## `ERC8004_FROM_BLOCK` — Keep It Current
 
