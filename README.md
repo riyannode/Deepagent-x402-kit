@@ -1,6 +1,6 @@
 # DeepAgent x402 Kit
 
-Single-wallet ERC-8004 DeepAgent SDK built on **LangChain**.
+Standalone sdk for arc/circle and single-wallet ERC-8004 + x402 DeepAgent SDK built on **LangChain**.
 
 One Circle Developer-Controlled Wallet (DCW) = one on-chain ERC-8004 agent identity (ERC-721 NFT) on Arc Testnet. The Deep Agent can bootstrap its identity once via `register_identity_once`. Optional Circle x402 payment tools are policy-gated and off by default.
 
