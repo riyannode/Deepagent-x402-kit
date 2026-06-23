@@ -73,7 +73,7 @@ Deepagent-x402-kit/
 
 `register_identity_once` does exactly one thing: mints one ERC-721 identity NFT on the IdentityRegistry contract at `0x8004A818BFB912233c491871b3d84c89A494BD9e` on Arc Testnet (chain ID 5042002).
 
-The identity NFT is bound to your configured DCW wallet address. One wallet = one identity. The agent URI is a `data:application/json;base64,...` containing the agent metadata (name, description, image, services, x402 support).
+The identity NFT is minted to the configured DCW wallet address. The SDK enforces one registration per wallet by scanning historical mint events. One wallet = one identity. The agent URI is a `data:application/json;base64,...` containing the agent metadata (name, description, image, services, x402 support).
 
 ### On-chain duplicate scan
 
@@ -102,6 +102,8 @@ ERC8004_FROM_BLOCK=41338000
 ```
 
 A recent block = faster scan. An old block = more RPC calls but still correct.
+
+> **Warning:** Never set `ERC8004_FROM_BLOCK` after any previous registration transaction for this wallet. If it is set too recent, duplicate-prevention can miss the historical mint. If unsure, use the registry first Transfer event / default block even if scanning is slower.
 
 Default: `41338000` (registry first Transfer event ~41338604).
 
@@ -187,7 +189,7 @@ When `X402_ENABLED=false`, no x402 tools are exposed at all.
 | Fail-closed | If any limit exceeded → `PermissionError`. No payment signed. |
 | ERC-8004 on-chain scan | Full scan from `ERC8004_FROM_BLOCK` to `latest`. No `balanceOf` shortcut. If `get_logs` fails → exception propagates → no tx submitted. |
 | Registration lock | SQLite lock with TTL (default 1260s). Lock TTL validated to cover full Circle polling window. |
-| Script integrity | Circle sidecar script hash verified before execution. |
+| Sidecar path check | Circle sidecar file must exist before execution. Optional script hash enforcement is not enabled by default. |
 | State directory | `0o700` permissions on Circle execution state directory. |
 | Non-root Docker | `USER appuser` in Dockerfile. |
 
