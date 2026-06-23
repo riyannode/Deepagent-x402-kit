@@ -82,10 +82,18 @@ class IdentityRegistryClient:
         to_topic = address_topic(owner)
         zero_topic = address_topic(ZERO_ADDRESS)
 
-        # Fast path: skip event scan if wallet owns zero tokens
+        # Fast path: if wallet currently owns tokens, we definitely need to scan.
+        # If balance==0, the NFT may have been transferred out — still scan recent
+        # range to catch historical mints (duplicate prevention).
         balance = self._balance_of(owner)
-        if balance == 0:
-            return None
+        if balance == -1:
+            # balanceOf call failed (contract error) — proceed with full scan
+            pass
+        elif balance == 0:
+            # No current ownership, but scan recent range to catch historical mints
+            # Use a narrower window (last 100k blocks) for balance==0 case
+            recent_range = min(self.block_range * 10, 100000)
+            from_block = max(from_block, latest - recent_range)
 
         if from_block > latest:
             return None

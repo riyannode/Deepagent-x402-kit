@@ -66,6 +66,18 @@ class CircleNodeSidecarExecutor:
         max_polls = cfg.circle_tx_max_polls
         timeout_seconds = max(180, poll_seconds * max_polls + 120)
 
+        # B1: Ensure lock TTL covers the full Circle polling + receipt window
+        # Total max wait = Circle poll (poll*max_polls) + buffer (120s) + receipt poll (receipt_poll*receipt_max_polls)
+        total_max_wait = (poll_seconds * max_polls + 120) + (cfg.receipt_poll_seconds * cfg.receipt_max_polls)
+        if cfg.registration_lock_ttl_seconds < total_max_wait:
+            raise RuntimeError(
+                f"REGISTRATION_LOCK_TTL_SECONDS ({cfg.registration_lock_ttl_seconds}) must be >= "
+                f"total max wait ({total_max_wait}). "
+                f"Circle poll: {poll_seconds}*{max_polls}+120={poll_seconds*max_polls+120}s, "
+                f"receipt poll: {cfg.receipt_poll_seconds}*{cfg.receipt_max_polls}={cfg.receipt_poll_seconds*cfg.receipt_max_polls}s. "
+                f"Set REGISTRATION_LOCK_TTL_SECONDS={total_max_wait + 60} in .env"
+            )
+
         payload = {
             "walletAddress": intent.wallet_address,
             "blockchain": intent.blockchain,

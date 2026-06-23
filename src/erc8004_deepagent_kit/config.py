@@ -189,7 +189,7 @@ def load_config(env_file: str | None = None) -> KitConfig:
         circle_fee_level=fee_level,
         circle_tx_poll_seconds=_env_int("CIRCLE_TX_POLL_SECONDS", 5, min_value=1, max_value=60),
         circle_tx_max_polls=_env_int("CIRCLE_TX_MAX_POLLS", 180, min_value=1, max_value=300),
-        registration_lock_ttl_seconds=_env_int("REGISTRATION_LOCK_TTL_SECONDS", 300, min_value=60, max_value=86400),
+        registration_lock_ttl_seconds=_env_int("REGISTRATION_LOCK_TTL_SECONDS", 1260, min_value=60, max_value=86400),
         verify_chain_id=_env_bool("VERIFY_CHAIN_ID", True),
         expose_reputation_write_tools_to_agent=_env_bool("EXPOSE_REPUTATION_WRITE_TOOLS_TO_AGENT", False),
         expose_validation_write_tools_to_agent=_env_bool("EXPOSE_VALIDATION_WRITE_TOOLS_TO_AGENT", False),
