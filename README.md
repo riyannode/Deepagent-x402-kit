@@ -458,6 +458,30 @@ docker compose run --rm erc8004-live doctor
 docker compose run --rm erc8004-live register
 ```
 
+### Installer Validation
+
+Both `setup.sh` (local) and Docker have been tested:
+
+**`bash setup.sh` (local):**
+- [x] Python 3.12 detected
+- [x] Node v22 detected
+- [x] venv created
+- [x] Python deps installed (`pip install -e .`)
+- [x] Node sidecar deps installed (`npm ci`)
+- [x] `.env` copied from `.env.example`
+- [x] Config validation passed (all registry addresses, RPC, chain ID)
+
+**Docker (`docker build` + `doctor`):**
+- [x] Build succeeds (no errors)
+- [x] Config: `0x8004A8...` (IdentityRegistry)
+- [x] Config: `0x8004B6...` (ReputationRegistry)
+- [x] Config: `0x8004Cb...` (ValidationRegistry)
+- [x] RPC chain ID: `5042002`
+- [x] Identity registry bytecode: 130 bytes
+- [x] Latest block: `48410254` (live, no tx sent)
+- [x] Data dirs writable (`/data`)
+- [ ] Circle credentials — needs `.env` (expected)
+
 ---
 
 ## CLI Commands
