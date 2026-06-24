@@ -142,19 +142,6 @@ ERC-8004 stores a metadata URI on-chain as the `tokenURI` of the identity NFT. T
 }
 ```
 
-**Why this kit's format is richer:**
-
-| Field | Purpose |
-|-------|---------|
-| `type` | Identifies the metadata convention (`registration-v1`). Lets consumers distinguish structured metadata from arbitrary JSON. |
-| `services[]` | Agent-to-agent discovery. Each service has a `name` and `endpoint` — other agents can call these to discover capabilities. |
-| `x402Support` | Declares whether this agent accepts x402 payments. Buyers can check this before attempting a paid call. |
-| `active` | Whether the agent is currently online. Can be toggled without re-registering. |
-| `registrations[]` | Cross-chain registrations (future: same agent on multiple chains). |
-| `supportedTrust` | Which trust mechanisms the agent supports (`reputation`, `validation`). |
-
-The Arc quickstart format (`agent_type`, `capabilities`, `version`) is also valid — use whichever fits your use case. The only requirement from ERC-8004 is that the URI resolves to valid JSON.
-
 ### Data URI vs IPFS
 
 This kit stores metadata as a `data:application/json;base64,...` URI (self-contained, no external dependency). The [Arc quickstart](https://docs.arc.io/arc/tutorials/register-your-first-ai-agent) recommends IPFS.
@@ -165,7 +152,8 @@ This kit stores metadata as a `data:application/json;base64,...` URI (self-conta
 | **Size limit** | 32KB (enforced by SDK) | No practical limit |
 | **Gas cost** | Higher — data embedded in tx calldata | Lower — only CID stored on-chain |
 | **Persistence** | Lives on-chain forever | Depends on pinning service |
-| **Best for** | Hackathons, demos, small metadata | Production, large metadata, decentralized storage |
+
+Switch to IPF in Production, for large metadata, and decentralized storage |
 
 To use IPFS instead, upload your metadata JSON to [Pinata](https://pinata.cloud/), [NFT.Storage](https://nft.storage/), or [Web3.Storage](https://web3.storage/), then pass the `ipfs://...` URI to the registration call. The on-chain contract doesn't care — any valid URI works.
 
