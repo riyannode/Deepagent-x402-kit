@@ -185,10 +185,12 @@ def assert_challenge_valid(challenge: dict, expected_url: str) -> dict:
         raise PermissionError(f"x402: invalid payTo: {pay_to}")
 
     # Resource check — challenge resource must match requested URL
+    # resource can be a plain string URL or an object {url, description, mimeType}
     resource = challenge.get("resource", "")
-    if resource and resource != expected_url:
+    resource_url = resource.get("url") if isinstance(resource, dict) else resource
+    if resource_url and resource_url != expected_url:
         raise PermissionError(
-            f"x402: challenge resource {resource!r} != requested URL {expected_url!r}"
+            f"x402: challenge resource {resource_url!r} != requested URL {expected_url!r}"
         )
 
     return accept
