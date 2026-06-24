@@ -22,6 +22,63 @@ from ..x402.policy import assert_amount_allowed, assert_challenge_valid, assert_
 
 ADDRESS_RE = re.compile(r"^0x[a-fA-F0-9]{40}$")
 
+# Seller input validation limits
+_MAX_PAYMENT_SIGNATURE_BYTES = 8192
+_MAX_REQUEST_ID_LEN = 128
+_MAX_RESOURCE_LEN = 2048
+
+
+def _validate_seller_inputs(payment_signature: str, resource: str, request_id: str) -> None:
+    """Validate seller tool inputs before passing to sidecar."""
+    if not payment_signature or not isinstance(payment_signature, str):
+        raise ValueError("payment_signature must be a non-empty string")
+    if len(payment_signature) > _MAX_PAYMENT_SIGNATURE_BYTES:
+        raise ValueError(f"payment_signature too large ({len(payment_signature)} > {_MAX_PAYMENT_SIGNATURE_BYTES})")
+    import base64
+    try:
+        base64.b64decode(payment_signature, validate=True)
+    except Exception:
+        raise ValueError("payment_signature must be valid base64")
+
+    if not resource or not isinstance(resource, str):
+        raise ValueError("resource must be a non-empty string")
+    if len(resource) > _MAX_RESOURCE_LEN:
+        raise ValueError(f"resource too large ({len(resource)} > {_MAX_RESOURCE_LEN})")
+    if not resource.startswith(("http://", "https://")):
+        raise ValueError("resource must be a valid URL")
+
+    if not request_id or not isinstance(request_id, str):
+        raise ValueError("request_id must be a non-empty string")
+    if len(request_id) > _MAX_REQUEST_ID_LEN:
+        raise ValueError(f"request_id too large ({len(request_id)} > {_MAX_REQUEST_ID_LEN})")
+
+
+def _extract_amount_from_payment_payload(payment_signature: str) -> str | None:
+    """Extract amount from base64-encoded x402 payment payload."""
+    import base64
+    try:
+        decoded = base64.b64decode(payment_signature)
+        payload = json.loads(decoded)
+        value = (payload.get("payload") or {}).get("authorization", {}).get("value")
+        if value is not None:
+            return str(value)
+        accepted = payload.get("accepted") or payload.get("payload", {}).get("accepted")
+        if accepted and "amount" in accepted:
+            return str(accepted["amount"])
+    except Exception:
+        pass
+    return None
+
+
+def _redact(text: str) -> str:
+    """Strip known secrets from error messages."""
+    cfg = load_config()
+    s = text
+    for secret in [cfg.circle_api_key, cfg.circle_entity_secret]:
+        if secret:
+            s = s.replace(secret, "[redacted]")
+    return s
+
 
 def _sidecar() -> Path:
     p = Path(os.getenv("SDK_PROJECT_ROOT", "/app")) / "scripts" / "x402_nano.mjs"
@@ -36,13 +93,16 @@ def _run(payload: dict, timeout: int = 120) -> dict:
     if not cfg.circle_api_key or not cfg.circle_entity_secret:
         raise RuntimeError("CIRCLE_API_KEY and CIRCLE_ENTITY_SECRET required")
 
-    proc = subprocess.run(
-        ["node", str(script)],
-        input=json.dumps(payload), text=True, capture_output=True,
-        cwd=str(script.parent.parent), check=False, timeout=timeout,
-    )
+    try:
+        proc = subprocess.run(
+            ["node", str(script)],
+            input=json.dumps(payload), text=True, capture_output=True,
+            cwd=str(script.parent.parent), check=False, timeout=timeout,
+        )
+    except subprocess.TimeoutExpired:
+        raise RuntimeError(f"x402 nano sidecar timed out after {timeout}s")
     if proc.returncode != 0 and not proc.stdout.strip():
-        raise RuntimeError(f"x402 nano sidecar failed: {proc.stderr[:500]}")
+        raise RuntimeError(f"x402 nano sidecar failed: {_redact(proc.stderr[:500])}")
     try:
         result = json.loads(proc.stdout)
     except json.JSONDecodeError as e:
@@ -127,6 +187,13 @@ def x402_nano_sell_settle(payment_signature: str, resource: str, request_id: str
     if not ADDRESS_RE.match(pay_to):
         raise ValueError(f"X402_DEFAULT_SELLER_WALLET_ADDRESS is not a valid EVM address: {pay_to!r}")
 
+    # Validate inputs before passing to sidecar
+    _validate_seller_inputs(payment_signature, resource, request_id)
+
+    # Extract actual amount from payment payload instead of hardcoding "1"
+    extracted_amount = _extract_amount_from_payment_payload(payment_signature)
+    amount_atomic = extracted_amount or "1"
+
     ledger = X402Ledger()
     # F10: Use full payment signature hash (not truncated)
     payment_hash = hashlib.sha256(
@@ -139,13 +206,13 @@ def x402_nano_sell_settle(payment_signature: str, resource: str, request_id: str
     row_id = ledger.insert_pending(
         mode="nano_sell", agent_key="seller", wallet_id="seller",
         host=urlparse(resource).hostname or "", resource=resource,
-        request_id=request_id, amount_atomic="1",
+        request_id=request_id, amount_atomic=amount_atomic,
     )
 
     try:
         result = _run({
             "mode": "sell", "paymentSignature": payment_signature,
-            "payTo": pay_to, "amountAtomic": "1", "resource": resource,
+            "payTo": pay_to, "amountAtomic": amount_atomic, "resource": resource,
         })
         tx_hash = result.get("txHash")
         ledger.update_status(row_id, "success", tx_hash=tx_hash)

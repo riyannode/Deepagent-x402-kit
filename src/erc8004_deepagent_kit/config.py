@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 from dataclasses import dataclass
+from decimal import Decimal, InvalidOperation, ROUND_DOWN
 from pathlib import Path
 from typing import Any
 
@@ -62,6 +63,31 @@ def _validate_seller_address(value: str | None) -> str | None:
     return Web3.to_checksum_address(value)
 
 
+def usdc_to_atomic(value: str) -> str:
+    """Convert USDC display amount (e.g. '0.29') to atomic units (6 decimals).
+
+    Uses Decimal to avoid floating-point precision loss.
+    Truncates (ROUND_DOWN) to avoid overpaying.
+    """
+    try:
+        amount = Decimal(value)
+    except (InvalidOperation, ValueError) as exc:
+        raise ValueError(f"Invalid USDC amount: {value!r}") from exc
+    if amount <= 0:
+        raise ValueError("amount must be positive")
+    atomic = (amount * Decimal("1000000")).to_integral_exact(rounding=ROUND_DOWN)
+    return str(int(atomic))
+
+
+def atomic_to_usdc(value: str) -> str:
+    """Convert atomic units to USDC display amount."""
+    try:
+        atomic = Decimal(value)
+    except (InvalidOperation, ValueError) as exc:
+        raise ValueError(f"Invalid atomic amount: {value!r}") from exc
+    return str(atomic / Decimal("1000000"))
+
+
 def _require_urlish(value: str, name: str) -> str:
     value = value.strip()
     if not (value.startswith("http://") or value.startswith("https://")):
@@ -110,6 +136,7 @@ class KitConfig:
     x402_expose_batch_seller_to_agent: bool
     x402_expose_nano_buyer_to_agent: bool
     x402_expose_nano_seller_to_agent: bool
+    x402_expose_gateway_deposit_to_agent: bool
     deepagent_model: str
     enable_reputation_writes: bool
     enable_validation_writes: bool
@@ -215,6 +242,7 @@ def load_config(env_file: str | None = None) -> KitConfig:
         x402_expose_batch_seller_to_agent=_env_bool("X402_EXPOSE_BATCH_SELLER_TO_AGENT", False),
         x402_expose_nano_buyer_to_agent=_env_bool("X402_EXPOSE_NANO_BUYER_TO_AGENT", False),
         x402_expose_nano_seller_to_agent=_env_bool("X402_EXPOSE_NANO_SELLER_TO_AGENT", False),
+        x402_expose_gateway_deposit_to_agent=_env_bool("X402_EXPOSE_GATEWAY_DEPOSIT_TO_AGENT", False),
         deepagent_model=_env("DEEPAGENT_MODEL", "anthropic:claude-sonnet-4-6") or "anthropic:claude-sonnet-4-6",
         enable_reputation_writes=_env_bool("ENABLE_REPUTATION_WRITES", False),
         enable_validation_writes=_env_bool("ENABLE_VALIDATION_WRITES", False),

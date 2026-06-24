@@ -41,6 +41,7 @@ def _get_erc8004_config_impl() -> dict:
                 "batch_seller": cfg.x402_expose_batch_seller_to_agent,
                 "nano_buyer": cfg.x402_expose_nano_buyer_to_agent,
                 "nano_seller": cfg.x402_expose_nano_seller_to_agent,
+                "gateway_deposit": cfg.x402_expose_gateway_deposit_to_agent,
             },
         },
     }

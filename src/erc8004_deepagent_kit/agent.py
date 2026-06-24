@@ -33,7 +33,8 @@ def build_erc8004_deep_agent(model: str | None = None):
 
     # x402 payment tools — granular exposure
     if cfg.x402_enabled:
-        tools.append(gateway_deposit)
+        if cfg.x402_expose_gateway_deposit_to_agent:
+            tools.append(gateway_deposit)
 
         if cfg.x402_expose_balance_to_agent:
             tools.extend([x402_batch_balance, x402_nano_balance])

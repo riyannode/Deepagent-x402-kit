@@ -21,11 +21,75 @@ from urllib.parse import urlparse
 
 from langchain_core.tools import tool
 
-from ..config import load_config
+from ..config import load_config, usdc_to_atomic
 from ..x402.ledger import X402Ledger
 from ..x402.policy import assert_amount_allowed, assert_challenge_valid, assert_url_allowed
 
 ADDRESS_RE = re.compile(r"^0x[a-fA-F0-9]{40}$")
+
+# Seller input validation limits
+_MAX_PAYMENT_SIGNATURE_BYTES = 8192  # base64-encoded x402 payload
+_MAX_REQUEST_ID_LEN = 128
+_MAX_RESOURCE_LEN = 2048
+
+
+def _validate_seller_inputs(payment_signature: str, resource: str, request_id: str) -> None:
+    """Validate seller tool inputs before passing to sidecar."""
+    if not payment_signature or not isinstance(payment_signature, str):
+        raise ValueError("payment_signature must be a non-empty string")
+    if len(payment_signature) > _MAX_PAYMENT_SIGNATURE_BYTES:
+        raise ValueError(f"payment_signature too large ({len(payment_signature)} > {_MAX_PAYMENT_SIGNATURE_BYTES})")
+    # Basic base64 sanity check
+    import base64
+    try:
+        base64.b64decode(payment_signature, validate=True)
+    except Exception:
+        raise ValueError("payment_signature must be valid base64")
+
+    if not resource or not isinstance(resource, str):
+        raise ValueError("resource must be a non-empty string")
+    if len(resource) > _MAX_RESOURCE_LEN:
+        raise ValueError(f"resource too large ({len(resource)} > {_MAX_RESOURCE_LEN})")
+    if not resource.startswith(("http://", "https://")):
+        raise ValueError("resource must be a valid URL")
+
+    if not request_id or not isinstance(request_id, str):
+        raise ValueError("request_id must be a non-empty string")
+    if len(request_id) > _MAX_REQUEST_ID_LEN:
+        raise ValueError(f"request_id too large ({len(request_id)} > {_MAX_REQUEST_ID_LEN})")
+
+
+def _extract_amount_from_payment_payload(payment_signature: str) -> str | None:
+    """Extract amount from base64-encoded x402 payment payload.
+
+    Decodes the payment signature and extracts the authorization value.
+    Returns the amount as a string, or None if extraction fails.
+    """
+    import base64
+    try:
+        decoded = base64.b64decode(payment_signature)
+        payload = json.loads(decoded)
+        # x402 payload structure: { payload: { authorization: { value: "..." } } }
+        value = (payload.get("payload") or {}).get("authorization", {}).get("value")
+        if value is not None:
+            return str(value)
+        # Fallback: check accepted.amount
+        accepted = payload.get("accepted") or payload.get("payload", {}).get("accepted")
+        if accepted and "amount" in accepted:
+            return str(accepted["amount"])
+    except Exception:
+        pass
+    return None
+
+
+def _redact(text: str) -> str:
+    """Strip known secrets from error messages."""
+    cfg = load_config()
+    s = text
+    for secret in [cfg.circle_api_key, cfg.circle_entity_secret]:
+        if secret:
+            s = s.replace(secret, "[redacted]")
+    return s
 
 
 def _sidecar() -> Path:
@@ -42,13 +106,16 @@ def _run(payload: dict, timeout: int = 120) -> dict:
     if not cfg.circle_api_key or not cfg.circle_entity_secret:
         raise RuntimeError("CIRCLE_API_KEY and CIRCLE_ENTITY_SECRET required")
 
-    proc = subprocess.run(
-        ["node", str(script)],
-        input=json.dumps(payload), text=True, capture_output=True,
-        cwd=str(script.parent.parent), check=False, timeout=timeout,
-    )
+    try:
+        proc = subprocess.run(
+            ["node", str(script)],
+            input=json.dumps(payload), text=True, capture_output=True,
+            cwd=str(script.parent.parent), check=False, timeout=timeout,
+        )
+    except subprocess.TimeoutExpired:
+        raise RuntimeError(f"x402 batching sidecar timed out after {timeout}s")
     if proc.returncode != 0 and not proc.stdout.strip():
-        raise RuntimeError(f"x402 batching sidecar failed: {proc.stderr[:500]}")
+        raise RuntimeError(f"x402 batching sidecar failed: {_redact(proc.stderr[:500])}")
     try:
         result = json.loads(proc.stdout)
     except json.JSONDecodeError as e:
@@ -141,6 +208,13 @@ def x402_batch_sell_settle(payment_signature: str, resource: str, request_id: st
     if not ADDRESS_RE.match(pay_to):
         raise ValueError(f"X402_DEFAULT_SELLER_WALLET_ADDRESS is not a valid EVM address: {pay_to!r}")
 
+    # Validate inputs before passing to sidecar
+    _validate_seller_inputs(payment_signature, resource, request_id)
+
+    # Extract actual amount from payment payload instead of hardcoding "1"
+    extracted_amount = _extract_amount_from_payment_payload(payment_signature)
+    amount_atomic = extracted_amount or "1"
+
     ledger = X402Ledger()
 
     # F10: Use full payment signature hash (not truncated)
@@ -155,13 +229,13 @@ def x402_batch_sell_settle(payment_signature: str, resource: str, request_id: st
     row_id = ledger.insert_pending(
         mode="batch_sell", agent_key="seller", wallet_id="seller",
         host=urlparse(resource).hostname or "", resource=resource,
-        request_id=request_id, amount_atomic="1",
+        request_id=request_id, amount_atomic=amount_atomic,
     )
 
     try:
         result = _run({
             "mode": "sell", "paymentSignature": payment_signature,
-            "payTo": pay_to, "amountAtomic": "1", "resource": resource,
+            "payTo": pay_to, "amountAtomic": amount_atomic, "resource": resource,
         })
         tx_hash = result.get("txHash")
         ledger.update_status(row_id, "success", tx_hash=tx_hash)
@@ -212,7 +286,7 @@ def gateway_deposit(amount_usdc: str) -> dict:
     if amount_float > 100:
         raise ValueError("amount_usdc exceeds safety limit (100 USDC)")
 
-    amount_atomic = str(int(amount_float * 1_000_000))
+    amount_atomic = usdc_to_atomic(amount_usdc)
 
     USDC_ADDRESS = "0x3600000000000000000000000000000000000000"
     GATEWAY_ADDRESS = "0x0077777d7EBA4688BDeF3E311b846F25870A19B9"

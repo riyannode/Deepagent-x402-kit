@@ -11,7 +11,7 @@ import sqlite3
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from ..config import load_config
+from ..config import atomic_to_usdc, load_config, usdc_to_atomic
 
 
 class X402Ledger:
@@ -77,7 +77,7 @@ class X402Ledger:
             f"{mode}:{agent_key}:{wallet_id}:{host}:{resource}:{request_id}:{amount_atomic}".encode()
         ).hexdigest()
         max_requests = int(cfg.x402_max_requests_per_day)
-        max_daily_atomic = int(float(cfg.x402_max_daily_usdc) * 1e6)
+        max_daily_atomic = int(usdc_to_atomic(cfg.x402_max_daily_usdc))
         amount_int = int(amount_atomic)
 
         conn = self._connect()
@@ -207,7 +207,7 @@ class X402Ledger:
         return {
             "request_count": count,
             "total_atomic": total_atomic,
-            "total_usdc": f"{total_atomic / 1e6:.6f}",
+            "total_usdc": atomic_to_usdc(str(total_atomic)),
         }
 
     def check_already_settled(self, payment_hash: str) -> str | None:
