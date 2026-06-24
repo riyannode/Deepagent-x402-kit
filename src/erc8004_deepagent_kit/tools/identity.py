@@ -58,6 +58,8 @@ def _get_identity_status_impl(agent_key: str | None = None) -> dict:
     cfg = load_config()
     wallet = get_configured_wallet()
     key = agent_key or cfg.agent_key
+    if len(key) > 128:
+        raise ValueError("agent_key must be <= 128 characters")
 
     local = _store().find(
         chain_id=cfg.chain_id,

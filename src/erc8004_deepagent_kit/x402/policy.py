@@ -32,22 +32,43 @@ _METADATA_HOSTS = {"169.254.169.254", "metadata.google.internal", "fd00::ec2"}
 
 
 def _parse_allowed_hosts(raw: str) -> set[str]:
-    """Parse comma-separated allowed hosts. Empty = allow none."""
+    """Parse comma-separated allowed hosts. Empty = allow none.
+
+    F3: Also validates that no allowed host resolves to a private IP.
+    """
     if not raw or not raw.strip():
         return set()
-    return {h.strip().lower() for h in raw.split(",") if h.strip()}
+    hosts = {h.strip().lower() for h in raw.split(",") if h.strip()}
+    # F3: Validate each allowed host against private IP ranges
+    for h in hosts:
+        if _is_blocked_ip(h):
+            raise PermissionError(f"x402: X402_ALLOWED_HOSTS contains blocked host: {h!r}")
+    return hosts
 
 
 def _is_blocked_ip(host: str) -> bool:
-    """Check if host resolves to a blocked IP range."""
+    """Check if host resolves to a blocked IP range.
+
+    For IP literals, check directly. For hostnames, resolve DNS first
+    to prevent DNS rebinding attacks (F2).
+    """
     if host in _METADATA_HOSTS:
         return True
     try:
         addr = ipaddress.ip_address(host)
         return any(addr in net for net in _BLOCKED_NETWORKS)
     except ValueError:
-        # Not an IP literal — check if it's a hostname that might resolve
-        # We can't DNS-resolve here without async, so just block known patterns
+        # Not an IP literal — resolve DNS to check the actual IP (F2: DNS rebinding)
+        import socket
+        try:
+            resolved = socket.getaddrinfo(host, None, socket.AF_UNSPEC, socket.SOCK_STREAM)
+            for family, _, _, _, sockaddr in resolved:
+                ip = ipaddress.ip_address(sockaddr[0])
+                if any(ip in net for net in _BLOCKED_NETWORKS):
+                    return True
+        except (socket.gaierror, OSError):
+            # DNS resolution failed — block to be safe
+            return True
         return False
 
 

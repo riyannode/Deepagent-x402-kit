@@ -51,16 +51,22 @@ class CircleNodeSidecarExecutor:
             raise RuntimeError(f"Circle sidecar script not found: {script}")
 
         # M6: Verify script integrity (SHA-256 of known-good script)
-        _EXPECTED_SCRIPT_HASH = "SKIP_CHECK"  # Set to real hash in production
+        _EXPECTED_SCRIPT_HASH = "82bebe742bb9543e2d043edd6b9318adcc182d2965eed2dbc0a424cba111d03a"
         if _EXPECTED_SCRIPT_HASH != "SKIP_CHECK":
             actual_hash = hashlib.sha256(script.read_bytes()).hexdigest()
             if actual_hash != _EXPECTED_SCRIPT_HASH:
                 raise RuntimeError(f"Circle sidecar script integrity check failed. Expected {_EXPECTED_SCRIPT_HASH}, got {actual_hash}")
 
-        cfg.circle_execution_state_dir.mkdir(parents=True, exist_ok=True)
+        state_dir = cfg.circle_execution_state_dir
+        # F6: Validate state dir is under /data or /tmp to prevent path traversal
+        resolved = state_dir.resolve()
+        allowed_prefixes = (Path("/data"), Path("/tmp"), Path("/app"))
+        if not any(str(resolved).startswith(str(p)) for p in allowed_prefixes):
+            raise PermissionError(f"CIRCLE_EXECUTION_STATE_DIR must be under /data, /tmp, or /app, got: {resolved}")
+        resolved.mkdir(parents=True, exist_ok=True)
         # M1: Restrict state directory permissions
-        os.chmod(cfg.circle_execution_state_dir, 0o700)
-        state_file = cfg.circle_execution_state_dir / f"circle-execution-{uuid4()}.json"
+        os.chmod(resolved, 0o700)
+        state_file = resolved / f"circle-execution-{uuid4()}.json"
 
         poll_seconds = cfg.circle_tx_poll_seconds
         max_polls = cfg.circle_tx_max_polls
@@ -77,6 +83,11 @@ class CircleNodeSidecarExecutor:
                 f"receipt poll: {cfg.receipt_poll_seconds}*{cfg.receipt_max_polls}={cfg.receipt_poll_seconds*cfg.receipt_max_polls}s. "
                 f"Set REGISTRATION_LOCK_TTL_SECONDS={total_max_wait + 60} in .env"
             )
+
+        # F7: Validate abi_parameters total size to prevent memory exhaustion
+        params_json = json.dumps(intent.abi_parameters)
+        if len(params_json) > 65536:  # 64KB max
+            raise ValueError(f"abi_parameters too large: {len(params_json)} bytes (max 65536)")
 
         payload = {
             "walletAddress": intent.wallet_address,

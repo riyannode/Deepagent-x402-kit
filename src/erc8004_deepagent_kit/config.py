@@ -53,6 +53,15 @@ def _require_address(value: str, name: str) -> str:
     return Web3.to_checksum_address(value)
 
 
+def _validate_seller_address(value: str | None) -> str | None:
+    if not value:
+        return None
+    value = value.strip()
+    if not Web3.is_address(value):
+        raise ValueError("X402_DEFAULT_SELLER_WALLET_ADDRESS must be a valid EVM address")
+    return Web3.to_checksum_address(value)
+
+
 def _require_urlish(value: str, name: str) -> str:
     value = value.strip()
     if not (value.startswith("http://") or value.startswith("https://")):
@@ -193,7 +202,7 @@ def load_config(env_file: str | None = None) -> KitConfig:
         x402_enabled=_env_bool("X402_ENABLED", False),
         x402_mode=(_env("X402_MODE", "batching") or "batching").lower(),
         x402_default_buyer_wallet_id=_env("X402_DEFAULT_BUYER_WALLET_ID"),
-        x402_default_seller_wallet_address=_env("X402_DEFAULT_SELLER_WALLET_ADDRESS"),
+        x402_default_seller_wallet_address=_validate_seller_address(_env("X402_DEFAULT_SELLER_WALLET_ADDRESS")),
         x402_max_per_request_usdc=_env("X402_MAX_PER_REQUEST_USDC", "0.000001") or "0.000001",
         x402_max_daily_usdc=_env("X402_MAX_DAILY_USDC", "0.01") or "0.01",
         x402_max_requests_per_day=_env_int("X402_MAX_REQUESTS_PER_DAY", 100, min_value=1, max_value=10000),

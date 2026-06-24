@@ -15,6 +15,7 @@
  */
 
 import { createRequire } from "node:module";
+import { randomBytes } from "node:crypto";
 const require = createRequire(import.meta.url);
 
 const TX_HASH_RE = /^0x[a-fA-F0-9]{64}$/;
@@ -38,6 +39,21 @@ function redact(v) {
   return s;
 }
 
+const MAX_BODY_BYTES = 1024 * 1024; // 1MB
+async function readBodyLimited(resp) {
+  const cl = resp.headers.get("content-length");
+  if (cl && Number(cl) > MAX_BODY_BYTES) return "[truncated: content-length " + cl + "]";
+  const reader = resp.body?.getReader?.();
+  if (!reader) return (await resp.text()).substring(0, MAX_BODY_BYTES);
+  const chunks = []; let total = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value); total += value.length;
+    if (total > MAX_BODY_BYTES) { reader.cancel(); return new TextDecoder().decode(Buffer.concat(chunks)).substring(0, MAX_BODY_BYTES); }
+  }
+  return new TextDecoder().decode(Buffer.concat(chunks));
+}
 function ok(d) { process.stdout.write(JSON.stringify({ ok: true, ...d })); }
 function fail(msg, d = {}) { process.stdout.write(JSON.stringify({ ok: false, error: msg, ...d })); }
 
@@ -65,7 +81,7 @@ async function prefetch(input) {
 
   const resp = await fetch(url, { method: method || "GET", headers: { "Content-Type": "application/json" } });
   if (resp.status !== 402) {
-    const body = await resp.text();
+    const body = await readBodyLimited(resp);
     return ok({ mode: "prefetch", paymentRequired: false, httpStatus: resp.status, body: body.substring(0, 4096) });
   }
 
@@ -92,7 +108,7 @@ async function pay(input) {
     // Fetch the URL to get the 402 challenge
     const resp = await fetch(url, { method: method || "GET", headers: { "Content-Type": "application/json" } });
     if (resp.status !== 402) {
-      const body = await resp.text();
+      const body = await readBodyLimited(resp);
       return ok({ mode: "batch_pay", paymentRequired: false, httpStatus: resp.status, body: body.substring(0, 4096) });
     }
 
@@ -116,7 +132,7 @@ async function pay(input) {
 
   const extra = accept.extra || {};
   const now = Math.floor(Date.now() / 1000);
-  const nonce = "0x" + Array.from({ length: 32 }, () => Math.floor(Math.random() * 16).toString(16)).join("");
+  const nonce = "0x" + randomBytes(32).toString("hex");
   const authorization = {
     from: addr.toLowerCase(), to: accept.payTo, value: amountAtomic,
     validAfter: String(now - 60), validBefore: String(now + (accept.maxTimeoutSeconds || 604900)), nonce,

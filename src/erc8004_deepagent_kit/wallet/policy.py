@@ -34,6 +34,9 @@ class WalletPolicy:
             uri = intent.abi_parameters[0]
             if not uri.startswith("data:application/json;base64,"):
                 raise PermissionError(f"register(string) agent_uri must be a data: URI, got: {uri[:50]}...")
+            # F5: Reject oversized URIs (>64KB) to prevent memory exhaustion in sidecar
+            if len(uri) > 65536:
+                raise PermissionError(f"register(string) agent_uri too large: {len(uri)} bytes (max 65536)")
             return
 
         if contract == self.reputation_registry and sig == "giveFeedback(uint256,int128,uint8,string,string,string,string,bytes32)":

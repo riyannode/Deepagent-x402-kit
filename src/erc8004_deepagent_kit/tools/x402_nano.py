@@ -43,7 +43,10 @@ def _run(payload: dict, timeout: int = 120) -> dict:
     )
     if proc.returncode != 0 and not proc.stdout.strip():
         raise RuntimeError(f"x402 nano sidecar failed: {proc.stderr[:500]}")
-    result = json.loads(proc.stdout)
+    try:
+        result = json.loads(proc.stdout)
+    except json.JSONDecodeError as e:
+        raise RuntimeError(f"x402 nano sidecar returned non-JSON: {proc.stdout[:200]}") from e
     if not result.get("ok"):
         raise RuntimeError(f"x402 nano failed: {result.get('error', 'unknown')}")
     return result
@@ -84,11 +87,15 @@ def x402_nano_pay(url: str, method: str = "GET") -> dict:
     # Phase 2: validate challenge in Python BEFORE any signing
     accept = assert_challenge_valid(challenge, url)
 
-    # Pre-validate amount against per-request max
-    amount_atomic = accept.get("amount", str(int(float(cfg.x402_max_per_request_usdc) * 1e6)))
+    # F9: Reject challenge if amount is missing (don't default to max)
+    amount_atomic = accept.get("amount")
+    if not amount_atomic:
+        raise PermissionError("x402: challenge missing amount field — refusing to default to max")
     assert_amount_allowed(str(amount_atomic))
 
-    row_id = ledger.insert_pending(
+    # F4: Atomic check+insert to prevent race condition
+    ledger = X402Ledger()
+    row_id = ledger.check_limits_and_insert_pending(
         mode="nano", agent_key=agent_key, wallet_id=buyer_wallet_id,
         host=host, resource=url, request_id=request_id,
         amount_atomic=str(amount_atomic),
@@ -117,11 +124,15 @@ def x402_nano_sell_settle(payment_signature: str, resource: str, request_id: str
     pay_to = cfg.x402_default_seller_wallet_address
     if not pay_to:
         raise RuntimeError("X402_DEFAULT_SELLER_WALLET_ADDRESS not configured")
+    # F13: Validate seller wallet is a proper EVM address
+    if not ADDRESS_RE.match(pay_to):
+        raise ValueError(f"X402_DEFAULT_SELLER_WALLET_ADDRESS is not a valid EVM address: {pay_to!r}")
 
     ledger = X402Ledger()
+    # F10: Use full payment signature hash (not truncated)
     payment_hash = hashlib.sha256(
-        f"nano_sell:{payment_signature[:64]}:{pay_to}:{resource}:{request_id}".encode()
-    ).hexdigest()
+            f"nano_sell:{payment_signature}:{pay_to}:{resource}:{request_id}".encode()
+        ).hexdigest()
     existing = ledger.check_already_settled(payment_hash)
     if existing in ("success", "already_settled"):
         return {"ok": True, "mode": "nano_sell", "status": "already_settled", "payment_hash": payment_hash}
