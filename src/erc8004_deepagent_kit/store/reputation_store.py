@@ -10,8 +10,12 @@ def _now() -> str:
 
 
 class ReputationStore:
-    def __init__(self, path: Path):
-        self.path = Path(path)
+    def __init__(self, path: Path, chain_id: int | str | None = None, registry: str | None = None):
+        base_path = Path(path)
+        if chain_id is not None and registry:
+            suffix = f"chain{chain_id}-{registry.lower()}"
+            base_path = base_path.with_name(f"{base_path.stem}-{suffix}{base_path.suffix}")
+        self.path = base_path
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self._init()
 

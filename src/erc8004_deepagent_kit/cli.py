@@ -213,7 +213,7 @@ def agent_register() -> None:
 
 def _reputation_indexer() -> ReputationIndexer:
     cfg = load_config()
-    return ReputationIndexer(cfg.rpc_url, cfg.reputation_registry, ReputationStore(cfg.reputation_store_path), cfg.reputation_indexer_from_block, cfg.reputation_indexer_block_range)
+    return ReputationIndexer(cfg.rpc_url, cfg.reputation_registry, ReputationStore(cfg.reputation_store_path, cfg.chain_id, cfg.reputation_registry), cfg.reputation_indexer_from_block, cfg.reputation_indexer_block_range)
 
 
 @app.command("reputation-index-once")
@@ -232,7 +232,7 @@ def reputation_index_range(from_block: int = typer.Option(..., "--from-block"), 
 def reputation_index_status() -> None:
     """Show local ERC-8004 reputation indexer status."""
     cfg = load_config()
-    store = ReputationStore(cfg.reputation_store_path)
+    store = ReputationStore(cfg.reputation_store_path, cfg.chain_id, cfg.reputation_registry)
     latest = None
     try:
         latest = int(ReputationRegistryClient(cfg.rpc_url, cfg.reputation_registry).w3.eth.block_number)

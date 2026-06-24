@@ -26,7 +26,8 @@ def _client() -> ReputationRegistryClient:
 
 
 def _store() -> ReputationStore:
-    return ReputationStore(load_config().reputation_store_path)
+    cfg = load_config()
+    return ReputationStore(cfg.reputation_store_path, cfg.chain_id, cfg.reputation_registry)
 
 
 def _agent_id(agent_id: str) -> str:
@@ -65,9 +66,16 @@ def _assert_reputation_writer_allowed_for_agent(agent_id: str):
     aid = _agent_id(agent_id)
     cfg = load_config()
     wallet = get_reputation_writer_wallet()
-    owner = IdentityRegistryClient(cfg.rpc_url, cfg.identity_registry).owner_of(aid)
-    if Web3.to_checksum_address(wallet.address) == Web3.to_checksum_address(owner):
+    identity = IdentityRegistryClient(cfg.rpc_url, cfg.identity_registry)
+    owner = identity.owner_of(aid)
+    writer = Web3.to_checksum_address(wallet.address)
+    if writer == Web3.to_checksum_address(owner):
         raise PermissionError("REPUTATION_WRITER_WALLET_ADDRESS must not equal the target agent owner wallet")
+    approved = identity.get_approved(aid)
+    if approved and writer == Web3.to_checksum_address(approved):
+        raise PermissionError("REPUTATION_WRITER_WALLET_ADDRESS must not be approved for the target agent token")
+    if identity.is_approved_for_all(owner, writer):
+        raise PermissionError("REPUTATION_WRITER_WALLET_ADDRESS must not be an operator for the target agent owner")
     return wallet
 
 

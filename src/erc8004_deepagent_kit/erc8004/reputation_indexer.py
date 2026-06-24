@@ -23,15 +23,28 @@ class ReputationIndexer:
         self.block_range = max(1, min(int(block_range), 10000))
         self.contract = self.w3.eth.contract(address=self.registry, abi=REPUTATION_REGISTRY_ABI)
 
+    def assert_contract_code(self) -> None:
+        code = self.w3.eth.get_code(self.registry)
+        if not code or code == b"":
+            raise RuntimeError(f"no contract bytecode found at ReputationRegistry address: {self.registry}")
+
     def index_once(self, to_block: int | None = None) -> dict:
+        self.assert_contract_code()
         latest = int(self.w3.eth.block_number if to_block is None else to_block)
         start = self.store.get_state(STATE_KEY)
         from_block = self.from_block if start is None else start + 1
         if from_block > latest:
             return {"ok": True, "from_block": from_block, "to_block": latest, "latest_block": latest, "chunks": 0, "new_feedback": 0, "revoked": 0, "responses": 0, "last_indexed_block": start}
-        return self.index_range(from_block, latest)
+        return self._index_range(from_block, latest, advance_state=True)
 
     def index_range(self, from_block: int, to_block: int) -> dict:
+        self.assert_contract_code()
+        start = max(0, int(from_block))
+        current = self.store.get_state(STATE_KEY)
+        contiguous = (current is None and start == self.from_block) or (current is not None and start == current + 1)
+        return self._index_range(from_block, to_block, advance_state=contiguous)
+
+    def _index_range(self, from_block: int, to_block: int, *, advance_state: bool) -> dict:
         start = max(0, int(from_block)); end = int(to_block)
         if end < start:
             raise ValueError("to_block must be >= from_block")
@@ -58,7 +71,8 @@ class ReputationIndexer:
                 a = event["args"]
                 self.store.insert_response({"agent_id": str(a["agentId"]), "client_address": Web3.to_checksum_address(a["clientAddress"]), "feedback_index": int(a["feedbackIndex"]), "responder": Web3.to_checksum_address(a["responder"]), "response_uri": a.get("responseURI", ""), "response_hash": _hex(a.get("responseHash", "")), "tx_hash": Web3.to_hex(event["transactionHash"]), "block_number": int(event["blockNumber"]), "log_index": int(event["logIndex"])})
                 counts["responses"] += 1
-            self.store.advance_state(STATE_KEY, chunk_to)
+            if advance_state:
+                self.store.advance_state(STATE_KEY, chunk_to)
             counts["chunks"] += 1
             cursor = chunk_to + 1
-        return {"ok": True, "from_block": start, "to_block": end, "latest_block": end, **counts, "last_indexed_block": end}
+        return {"ok": True, "from_block": start, "to_block": end, "latest_block": end, **counts, "advanced_state": advance_state, "last_indexed_block": self.store.get_state(STATE_KEY)}

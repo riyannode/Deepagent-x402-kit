@@ -212,7 +212,20 @@ def _owner_of(self: IdentityRegistryClient, agent_id: str) -> str:
     return Web3.to_checksum_address(self.contract.functions.ownerOf(_validate_agent_id(agent_id)).call())
 
 
+def _get_approved(self: IdentityRegistryClient, agent_id: str) -> str | None:
+    approved = Web3.to_checksum_address(self.contract.functions.getApproved(_validate_agent_id(agent_id)).call())
+    if approved == Web3.to_checksum_address("0x0000000000000000000000000000000000000000"):
+        return None
+    return approved
+
+
+def _is_approved_for_all(self: IdentityRegistryClient, owner: str, operator: str) -> bool:
+    return bool(self.contract.functions.isApprovedForAll(Web3.to_checksum_address(owner), Web3.to_checksum_address(operator)).call())
+
+
 IdentityRegistryClient.owner_of = _owner_of
+IdentityRegistryClient.get_approved = _get_approved
+IdentityRegistryClient.is_approved_for_all = _is_approved_for_all
 
 from .abi_reputation import REPUTATION_REGISTRY_ABI
 
