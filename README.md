@@ -1,4 +1,4 @@
-# DeepAgent x402 Kit
+# deepagent x402 Kit
 
 Standalone SDK for Arc/Circle and single-wallet ERC-8004 + x402 DeepAgent built on **LangChain**.
 
