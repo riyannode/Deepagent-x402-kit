@@ -478,9 +478,8 @@ Both `setup.sh` (local) and Docker have been tested:
 - [x] Config: `0x8004Cb...` (ValidationRegistry)
 - [x] RPC chain ID: `5042002`
 - [x] Identity registry bytecode: 130 bytes
-- [x] Latest block: `48410254` (live, no tx sent)
+- [x] Latest block: `48411622` (live, no tx sent)
 - [x] Data dirs writable (`/data`)
-- [ ] Circle credentials — needs `.env` (expected)
 
 ---
 
@@ -503,8 +502,8 @@ erc8004-deepagent agent-register      # Let the Deep Agent register via tools
 
 ### Identity checks (always):
 - [x] Registry addresses are valid EVM addresses
-- [ ] `DCW_WALLET_ADDRESS` is configured (needs `.env`)
-- [ ] `CIRCLE_API_KEY` and `CIRCLE_ENTITY_SECRET` are present (needs `.env`)
+- [x] `DCW_WALLET_ADDRESS` is configured
+- [x] `CIRCLE_API_KEY` and `CIRCLE_ENTITY_SECRET` are present
 - [x] Identity store parent directory exists
 - [x] RPC chain ID matches `CHAIN_ID` (5042002)
 - [x] IdentityRegistry contract has bytecode at the configured address
@@ -517,11 +516,11 @@ erc8004-deepagent agent-register      # Let the Deep Agent register via tools
 - [x] `X402_LEDGER_PATH` directory is writable
 
 ### Buyer exposure checks (when buyer tools exposed):
-- [ ] `X402_DEFAULT_BUYER_WALLET_ID` is non-empty (needs `.env`)
-- [ ] `X402_ALLOWED_HOSTS` is non-empty (needs `.env`)
+- [x] `X402_DEFAULT_BUYER_WALLET_ID` is non-empty
+- [x] `X402_ALLOWED_HOSTS` is non-empty
 
 ### Seller exposure checks (when seller tools exposed):
-- [ ] `X402_DEFAULT_SELLER_WALLET_ADDRESS` is non-empty (needs `.env`)
+- [x] `X402_DEFAULT_SELLER_WALLET_ADDRESS` is non-empty
 
 ---
 
@@ -559,22 +558,22 @@ erc8004-deepagent doctor
 [x] python -m compileall -q src       — all files compile
 [x] npm ci --omit=dev                 — node dependencies installed
 [x] erc8004-deepagent config          — prints config without secrets
-[x] erc8004-deepagent doctor          — all checks pass (except .env credentials)
+[x] erc8004-deepagent doctor          — all checks pass, ok=true
 [x] erc8004-deepagent doctor          — chain_id=5042002 verified
 [x] erc8004-deepagent doctor          — bytecode at IdentityRegistry verified
-[ ] erc8004-deepagent status          — works with configured DCW wallet (needs .env)
-[ ] erc8004-deepagent register        — first register: status=registered, real tx_hash (needs .env)
-[ ] tx on https://testnet.arcscan.app — targets IdentityRegistry contract (needs .env)
-[ ] tx method is register(string)     — ERC-721 Transfer mint to DCW wallet (needs .env)
-[ ] SQLite has exactly one identity row (needs .env)
-[ ] erc8004-deepagent register        — second register: already_registered (NO new tx) (needs .env)
-[ ] if X402_ENABLED=true:
+[x] erc8004-deepagent status          — works with configured DCW wallet
+[x] erc8004-deepagent register        — first register: status=registered, real tx_hash
+[x] tx on https://testnet.arcscan.app — targets IdentityRegistry contract
+[x] tx method is register(string)     — ERC-721 Transfer mint to DCW wallet
+[x] SQLite has exactly one identity row
+[x] erc8004-deepagent register        — second register: already_registered (NO new tx)
+[x] if X402_ENABLED=true:
     [x] doctor checks sidecar files exist
     [x] doctor checks @circle-fin/x402-batching importable (if batching mode)
     [x] doctor checks X402_GATEWAY_API_URL configured
     [x] doctor checks X402_LEDGER_PATH writable
-    [ ] if buyer exposed: doctor requires X402_DEFAULT_BUYER_WALLET_ID + X402_ALLOWED_HOSTS (needs .env)
-    [ ] if seller exposed: doctor requires X402_DEFAULT_SELLER_WALLET_ADDRESS (needs .env)
+    [x] if buyer exposed: doctor requires X402_DEFAULT_BUYER_WALLET_ID + X402_ALLOWED_HOSTS
+    [x] if seller exposed: doctor requires X402_DEFAULT_SELLER_WALLET_ADDRESS
 ```
 
 ---
