@@ -16,7 +16,7 @@ RUN apt-get update \
 
 WORKDIR /app
 
-COPY pyproject.toml README.md ./
+COPY pyproject.toml README.md setup.sh ./
 COPY package.json package-lock.json ./
 COPY src ./src
 COPY scripts ./scripts
@@ -25,7 +25,7 @@ COPY docker-entrypoint.sh ./docker-entrypoint.sh
 RUN pip install --upgrade pip \
     && pip install -e . \
     && npm ci --omit=dev \
-    && chmod +x /app/docker-entrypoint.sh
+    && chmod +x /app/docker-entrypoint.sh /app/setup.sh
 
 # L3: Non-root user for production safety
 RUN useradd -m -r -s /bin/false appuser \

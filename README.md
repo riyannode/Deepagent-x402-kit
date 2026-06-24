@@ -423,7 +423,7 @@ erc8004-deepagent register  # No LLM needed
 
 ## Quick Start
 
-**One command:**
+**Local (one command):**
 
 ```bash
 git clone https://github.com/riyannode/Deepagent-x402-kit.git
@@ -437,6 +437,25 @@ Then edit `.env` with your Circle credentials and run:
 source .venv/bin/activate
 erc8004-deepagent doctor
 erc8004-deepagent register
+```
+
+**Docker:**
+
+```bash
+git clone https://github.com/riyannode/Deepagent-x402-kit.git
+cd Deepagent-x402-kit
+cp .env.example .env   # edit with your credentials
+make build              # docker compose build
+make doctor             # validate everything
+make register           # register agent identity
+```
+
+Or directly:
+
+```bash
+docker compose build
+docker compose run --rm erc8004-live doctor
+docker compose run --rm erc8004-live register
 ```
 
 ---
