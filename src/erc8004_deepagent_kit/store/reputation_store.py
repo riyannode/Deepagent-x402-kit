@@ -61,15 +61,16 @@ class ReputationStore:
                 (tx_hash, int(block_number), int(log_index), _now(), str(agent_id), client_address, int(feedback_index)),
             )
 
-    def insert_response(self, row: dict) -> None:
+    def insert_response(self, row: dict) -> bool:
         data = dict(row)
         data.setdefault("created_at", _now())
         with self._conn() as db:
-            db.execute(
+            cursor = db.execute(
                 """INSERT OR IGNORE INTO reputation_responses(agent_id,client_address,feedback_index,responder,response_uri,response_hash,tx_hash,block_number,log_index,created_at)
                 VALUES(:agent_id,:client_address,:feedback_index,:responder,:response_uri,:response_hash,:tx_hash,:block_number,:log_index,:created_at)""",
                 data,
             )
+            return cursor.rowcount == 1
 
     def list_feedback(self, agent_id: str, client_addresses: list[str] | None = None, tag1: str = "", tag2: str = "", include_revoked: bool = False, limit: int = 50, offset: int = 0) -> list[dict]:
         sql = "SELECT * FROM reputation_feedback WHERE agent_id=?"

@@ -69,8 +69,9 @@ class ReputationIndexer:
                 counts["revoked"] += 1
             for event in response_logs:
                 a = event["args"]
-                self.store.insert_response({"agent_id": str(a["agentId"]), "client_address": Web3.to_checksum_address(a["clientAddress"]), "feedback_index": int(a["feedbackIndex"]), "responder": Web3.to_checksum_address(a["responder"]), "response_uri": a.get("responseURI", ""), "response_hash": _hex(a.get("responseHash", "")), "tx_hash": Web3.to_hex(event["transactionHash"]), "block_number": int(event["blockNumber"]), "log_index": int(event["logIndex"])})
-                counts["responses"] += 1
+                inserted = self.store.insert_response({"agent_id": str(a["agentId"]), "client_address": Web3.to_checksum_address(a["clientAddress"]), "feedback_index": int(a["feedbackIndex"]), "responder": Web3.to_checksum_address(a["responder"]), "response_uri": a.get("responseURI", ""), "response_hash": _hex(a.get("responseHash", "")), "tx_hash": Web3.to_hex(event["transactionHash"]), "block_number": int(event["blockNumber"]), "log_index": int(event["logIndex"])})
+                if inserted:
+                    counts["responses"] += 1
             if advance_state:
                 self.store.advance_state(STATE_KEY, chunk_to)
             counts["chunks"] += 1
