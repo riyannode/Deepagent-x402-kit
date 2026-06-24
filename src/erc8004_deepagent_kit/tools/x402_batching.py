@@ -75,14 +75,7 @@ def x402_batch_pay(url: str, method: str = "GET") -> dict:
     if not buyer_wallet_id:
         raise RuntimeError("X402_DEFAULT_BUYER_WALLET_ID not configured")
 
-    # Daily limits check
-    ledger = X402Ledger()
     agent_key = cfg.agent_key
-    ledger.check_daily_limits(agent_key, buyer_wallet_id)
-
-    host = urlparse(url).hostname or ""
-    resource = url
-    request_id = hashlib.sha256(f"batch:{url}:{method}:{agent_key}".encode()).hexdigest()[:16]
 
     # Phase 1: prefetch the 402 challenge (no signing yet)
     prefetch_result = _run({

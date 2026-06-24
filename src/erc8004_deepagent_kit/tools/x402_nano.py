@@ -67,7 +67,6 @@ def x402_nano_pay(url: str, method: str = "GET") -> dict:
 
     ledger = X402Ledger()
     agent_key = cfg.agent_key
-    ledger.check_daily_limits(agent_key, buyer_wallet_id)
 
     host = urlparse(url).hostname or ""
     request_id = hashlib.sha256(f"nano:{url}:{method}:{agent_key}".encode()).hexdigest()[:16]

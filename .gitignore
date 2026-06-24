@@ -34,3 +34,10 @@ node_modules/
 # OS
 .DS_Store
 Thumbs.db
+
+# Secrets (defense-in-depth)
+*.pem
+*.key
+*.secret
+*.p12
+*.pfx

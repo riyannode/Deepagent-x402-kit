@@ -60,6 +60,7 @@ Deepagent-x402-kit/
 ├── docker-compose.yml
 ├── docker-entrypoint.sh
 ├── Makefile
+├── setup.sh
 ├── pyproject.toml
 ├── package.json
 └── .env.example
