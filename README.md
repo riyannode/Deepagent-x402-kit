@@ -423,24 +423,19 @@ erc8004-deepagent register  # No LLM needed
 
 ## Quick Start
 
+**One command:**
+
 ```bash
-# Clone
 git clone https://github.com/riyannode/Deepagent-x402-kit.git
 cd Deepagent-x402-kit
+bash setup.sh
+```
 
-# Configure
-cp .env.example .env
-# Edit .env with your Circle credentials and DCW wallet address
+Then edit `.env` with your Circle credentials and run:
 
-# Install
-python3 -m venv .venv && source .venv/bin/activate
-pip install -U pip && pip install -e .
-npm ci --omit=dev
-
-# Validate
-erc8004-deepagent config
+```bash
+source .venv/bin/activate
 erc8004-deepagent doctor
-erc8004-deepagent status
 erc8004-deepagent register
 ```
 
