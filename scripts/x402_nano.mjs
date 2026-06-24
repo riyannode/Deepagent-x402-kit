@@ -83,26 +83,13 @@ async function pay(input) {
   if (!url) throw new Error("url required");
   if (!walletId) throw new Error("walletId required");
 
-  let challenge, accept;
-  if (preFetched) {
-    // Challenge already fetched and validated by Python layer
-    challenge = preFetched;
-    accept = challenge.accepts?.[0];
-    if (!accept) throw new Error("pre-fetched challenge has no accepts[]");
-  } else {
-    // Fetch the URL to get the 402 challenge
-    const resp = await fetch(url, { method: method || "GET", headers: { "Content-Type": "application/json" } });
-    if (resp.status !== 402) {
-      const body = await readBodyLimited(resp);
-      return ok({ mode: "nano_pay", paymentRequired: false, httpStatus: resp.status, body: body.substring(0, 4096) });
-    }
-
-    const header = resp.headers.get("payment-required");
-    if (!header) throw new Error("402 but no PAYMENT-REQUIRED header");
-    challenge = JSON.parse(Buffer.from(header, "base64").toString("utf-8"));
-    accept = challenge.accepts?.[0];
-    if (!accept) throw new Error("no accepts[]");
-  }
+  // Defense-in-depth: pay mode MUST use prevalidated challenge from Python.
+  // No fallback fetch — Python policy (assert_url_allowed + assert_challenge_valid)
+  // must run before signing.
+  if (!preFetched) throw new Error("pay requires prevalidated challenge from Python policy");
+  const challenge = preFetched;
+  const accept = challenge.accepts?.[0];
+  if (!accept) throw new Error("prevalidated challenge has no accepts[]");
 
   const amountAtomic = accept.amount || "1";
   const maxAtomic = String(Math.floor(Number(maxAmountUsdc || "0.000001") * 1e6));

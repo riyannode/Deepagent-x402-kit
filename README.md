@@ -183,13 +183,13 @@ When `X402_ENABLED=false`, no x402 tools are exposed at all.
 | Private/localhost hosts | Blocked: `127.0.0.1`, `localhost`, `0.0.0.0`, private ranges, link-local, metadata IPs. |
 | HTTPS required | `X402_REQUIRE_HTTPS=true` (default). Rejects `http://`. |
 | Challenge validation | Two-phase: prefetch → `assert_challenge_valid()` in Python → sign. Validates network (`eip155:5042002`), asset (Arc USDC `0x3600...0000`), scheme (`exact`/`exact_nano`), amount, payTo, resource. |
-| Daily budget | `X402_MAX_DAILY_USDC=0.01` — SQLite ledger tracks cumulative spend. |
+| Daily budget | `X402_MAX_DAILY_USDC=0.01` — SQLite ledger with `BEGIN IMMEDIATE` transaction. Check + insert atomic. Projected values (count+1, total+amount) checked, not just current. |
 | Request count | `X402_MAX_REQUESTS_PER_DAY=100` — SQLite ledger tracks count. |
 | Idempotency | Seller tools check `payment_hash` before settling. Same payment never settles twice. |
 | Fail-closed | If any limit exceeded → `PermissionError`. No payment signed. |
 | ERC-8004 on-chain scan | Full scan from `ERC8004_FROM_BLOCK` to `latest`. No `balanceOf` shortcut. If `get_logs` fails → exception propagates → no tx submitted. |
 | Registration lock | SQLite lock with TTL (default 1260s). Lock TTL validated to cover full Circle polling window. |
-| Sidecar path check | Circle sidecar file must exist before execution. Optional script hash enforcement is not enabled by default. |
+| Sidecar pay mode | `pay` mode **requires** prevalidated challenge from Python. No fallback fetch. Python runs `assert_url_allowed()` + `assert_challenge_valid()` before signing. |
 | State directory | `0o700` permissions on Circle execution state directory. |
 | Non-root Docker | `USER appuser` in Dockerfile. |
 

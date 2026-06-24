@@ -60,56 +60,31 @@ class X402Ledger:
                 ON x402_spend_ledger(payment_hash)
             """)
 
-    def check_daily_limits(self, agent_key: str, wallet_id: str) -> None:
-        """Fail-closed if daily budget or request count exceeded."""
-        cfg = load_config()
-        now = datetime.now(timezone.utc)
-        day_start = (now - timedelta(hours=24)).isoformat()
-
-        with self._connect() as conn:
-            row = conn.execute(
-                """SELECT COUNT(*) as cnt, COALESCE(SUM(CAST(amount_atomic AS INTEGER)), 0) as total
-                   FROM x402_spend_ledger
-                   WHERE agent_key = ? AND wallet_id = ? AND created_at > ?
-                   AND status IN ('pending', 'signed', 'success')""",
-                (agent_key, wallet_id, day_start),
-            ).fetchone()
-        count = int(row["cnt"]) if row else 0
-        total_atomic = int(row["total"]) if row else 0
-
-        max_requests = int(cfg.x402_max_requests_per_day)
-        max_daily_atomic = int(float(cfg.x402_max_daily_usdc) * 1e6)
-
-        if count >= max_requests:
-            raise PermissionError(
-                f"x402: daily request limit reached ({count}/{max_requests})"
-            )
-        if total_atomic >= max_daily_atomic:
-            raise PermissionError(
-                f"x402: daily budget exhausted ({total_atomic}/{max_daily_atomic} atomic)"
-            )
-
     def check_limits_and_insert_pending(
         self, *, mode: str, agent_key: str, wallet_id: str, host: str,
         resource: str, request_id: str, amount_atomic: str,
     ) -> int:
-        """Atomically check daily limits and insert pending row (F4: race condition fix).
+        """Atomically check daily limits and insert pending row.
 
-        Uses a single SQLite connection with WAL mode to minimize the window
-        between check and insert. Not fully serializable but much better than
-        separate connections.
+        Uses BEGIN IMMEDIATE to acquire a write lock before reading.
+        Check + insert happen in one transaction — no concurrent process
+        can slip between the check and the insert.
         """
         cfg = load_config()
-        now = datetime.now(timezone.utc)
-        day_start = (now - timedelta(hours=24)).isoformat()
+        now = datetime.now(timezone.utc).isoformat()
+        day_start = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat()
         payment_hash = hashlib.sha256(
             f"{mode}:{agent_key}:{wallet_id}:{host}:{resource}:{request_id}:{amount_atomic}".encode()
         ).hexdigest()
         max_requests = int(cfg.x402_max_requests_per_day)
         max_daily_atomic = int(float(cfg.x402_max_daily_usdc) * 1e6)
+        amount_int = int(amount_atomic)
 
-        with self._connect() as conn:
-            # F4: Check and insert in same connection to reduce race window
+        conn = self._connect()
+        try:
+            # Acquire write lock BEFORE reading — blocks other writers
+            conn.execute("BEGIN IMMEDIATE")
+
             row = conn.execute(
                 """SELECT COUNT(*) as cnt, COALESCE(SUM(CAST(amount_atomic AS INTEGER)), 0) as total
                    FROM x402_spend_ledger
@@ -121,12 +96,23 @@ class X402Ledger:
             count = int(row["cnt"]) if row else 0
             total_atomic = int(row["total"]) if row else 0
 
-            if count >= max_requests:
-                raise PermissionError(f"x402: daily request limit reached ({count}/{max_requests})")
-            if total_atomic >= max_daily_atomic:
-                raise PermissionError(f"x402: daily budget exhausted ({total_atomic / 1e6:.6f}/{max_daily_atomic / 1e6:.6f} USDC)")
+            # Project AFTER adding this payment
+            projected_count = count + 1
+            projected_total = total_atomic + amount_int
 
-            # Insert in same connection
+            if projected_count > max_requests:
+                conn.execute("ROLLBACK")
+                raise PermissionError(
+                    f"x402: daily request limit reached ({count}/{max_requests}, would be {projected_count})"
+                )
+            if projected_total > max_daily_atomic:
+                conn.execute("ROLLBACK")
+                raise PermissionError(
+                    f"x402: daily budget exhausted ({total_atomic}/{max_daily_atomic} atomic, "
+                    f"would be {projected_total})"
+                )
+
+            # Insert within the same transaction
             try:
                 conn.execute(
                     """INSERT INTO x402_spend_ledger
@@ -137,14 +123,24 @@ class X402Ledger:
                      amount_atomic, payment_hash, now, now),
                 )
             except sqlite3.IntegrityError:
+                # payment_hash already exists — idempotent
+                conn.execute("ROLLBACK")
                 row = conn.execute(
                     "SELECT id FROM x402_spend_ledger WHERE payment_hash = ?",
                     (payment_hash,),
                 ).fetchone()
                 return int(row["id"]) if row else -1
 
+            conn.execute("COMMIT")
             cur = conn.execute("SELECT last_insert_rowid()")
             return int(cur.fetchone()[0])
+        except (PermissionError, sqlite3.IntegrityError):
+            raise
+        except Exception:
+            conn.execute("ROLLBACK")
+            raise
+        finally:
+            conn.close()
 
     def insert_pending(
         self, *, mode: str, agent_key: str, wallet_id: str, host: str,
@@ -167,7 +163,6 @@ class X402Ledger:
                      amount_atomic, payment_hash, now, now),
                 )
             except sqlite3.IntegrityError:
-                # payment_hash already exists — idempotent
                 row = conn.execute(
                     "SELECT id FROM x402_spend_ledger WHERE payment_hash = ?",
                     (payment_hash,),
