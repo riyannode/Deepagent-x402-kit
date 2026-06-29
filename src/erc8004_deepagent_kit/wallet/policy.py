@@ -39,7 +39,11 @@ class WalletPolicy:
                 raise PermissionError(f"register(string) agent_uri too large: {len(uri)} bytes (max 65536)")
             return
 
-        if contract == self.reputation_registry and sig == "giveFeedback(uint256,int128,uint8,string,string,string,string,bytes32)":
+        if contract == self.reputation_registry and sig in {
+            "giveFeedback(uint256,int128,uint8,string,string,string,string,bytes32)",
+            "revokeFeedback(uint256,uint64)",
+            "appendResponse(uint256,address,uint64,string,bytes32)",
+        }:
             if not self.enable_reputation_writes:
                 raise PermissionError("reputation writes are disabled by policy")
             return

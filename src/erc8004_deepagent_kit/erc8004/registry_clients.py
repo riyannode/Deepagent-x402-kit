@@ -186,3 +186,96 @@ class ValidationRegistryClient:
             "tag": out[4],
             "last_update": int(out[5]),
         }
+
+# attached after class definition for backward-compatible minimal patch
+
+def _validate_agent_id(agent_id: str) -> int:
+    try:
+        value = int(agent_id)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("agent_id must be numeric") from exc
+    if value < 0:
+        raise ValueError("agent_id must be >= 0")
+    return value
+
+
+def _checksum_addresses(addresses: list[str]) -> list[str]:
+    out: list[str] = []
+    for address in addresses:
+        if not Web3.is_address(address):
+            raise ValueError(f"invalid EVM address: {address}")
+        out.append(Web3.to_checksum_address(address))
+    return out
+
+
+def _owner_of(self: IdentityRegistryClient, agent_id: str) -> str:
+    return Web3.to_checksum_address(self.contract.functions.ownerOf(_validate_agent_id(agent_id)).call())
+
+
+def _get_approved(self: IdentityRegistryClient, agent_id: str) -> str | None:
+    approved = Web3.to_checksum_address(self.contract.functions.getApproved(_validate_agent_id(agent_id)).call())
+    if approved == Web3.to_checksum_address("0x0000000000000000000000000000000000000000"):
+        return None
+    return approved
+
+
+def _is_approved_for_all(self: IdentityRegistryClient, owner: str, operator: str) -> bool:
+    return bool(self.contract.functions.isApprovedForAll(Web3.to_checksum_address(owner), Web3.to_checksum_address(operator)).call())
+
+
+IdentityRegistryClient.owner_of = _owner_of
+IdentityRegistryClient.get_approved = _get_approved
+IdentityRegistryClient.is_approved_for_all = _is_approved_for_all
+
+from .abi_reputation import REPUTATION_REGISTRY_ABI
+
+
+class ReputationRegistryClient:
+    def __init__(self, rpc_url: str, registry: str):
+        self.w3 = Web3(Web3.HTTPProvider(rpc_url, request_kwargs={"timeout": 30}))
+        self.registry = Web3.to_checksum_address(registry)
+        self.contract = self.w3.eth.contract(address=self.registry, abi=REPUTATION_REGISTRY_ABI)
+
+    def assert_contract_code(self) -> None:
+        code = self.w3.eth.get_code(self.registry)
+        if not code or code == b"":
+            raise RuntimeError(f"no contract bytecode found at ReputationRegistry address: {self.registry}")
+
+    def contract_code_size(self) -> int:
+        return len(self.w3.eth.get_code(self.registry))
+
+    def get_summary(self, agent_id: str, client_addresses: list[str], tag1: str = "", tag2: str = "") -> dict:
+        if not client_addresses:
+            raise ValueError("client_addresses is required for get_summary")
+        clients = _checksum_addresses(client_addresses)
+        out = self.contract.functions.getSummary(_validate_agent_id(agent_id), clients, tag1, tag2).call()
+        return {"agent_id": str(agent_id), "clients": clients, "tag1": tag1, "tag2": tag2, "count": int(out[0]), "summary_value": str(out[1]), "summary_value_decimals": int(out[2])}
+
+    def read_feedback(self, agent_id: str, client_address: str, feedback_index: int) -> dict:
+        client = _checksum_addresses([client_address])[0]
+        if int(feedback_index) <= 0:
+            raise ValueError("feedback_index must be > 0")
+        out = self.contract.functions.readFeedback(_validate_agent_id(agent_id), client, int(feedback_index)).call()
+        return {"agent_id": str(agent_id), "client_address": client, "feedback_index": int(feedback_index), "value": str(out[0]), "value_decimals": int(out[1]), "tag1": out[2], "tag2": out[3], "is_revoked": bool(out[4])}
+
+    def read_all_feedback(self, agent_id: str, client_addresses: list[str] | None = None, tag1: str = "", tag2: str = "", include_revoked: bool = False, max_items: int = 200) -> dict:
+        clients = _checksum_addresses(client_addresses or [])
+        out = self.contract.functions.readAllFeedback(_validate_agent_id(agent_id), clients, tag1, tag2, bool(include_revoked)).call()
+        rows = []
+        total = len(out[0])
+        for i in range(min(total, max(0, int(max_items)))):
+            rows.append({"agent_id": str(agent_id), "client_address": Web3.to_checksum_address(out[0][i]), "feedback_index": int(out[1][i]), "value": str(out[2][i]), "value_decimals": int(out[3][i]), "tag1": out[4][i], "tag2": out[5][i], "is_revoked": bool(out[6][i])})
+        return {"agent_id": str(agent_id), "feedback": rows, "truncated": total > len(rows)}
+
+    def get_clients(self, agent_id: str) -> list[str]:
+        return _checksum_addresses(list(self.contract.functions.getClients(_validate_agent_id(agent_id)).call()))
+
+    def get_last_index(self, agent_id: str, client_address: str) -> int:
+        client = _checksum_addresses([client_address])[0]
+        return int(self.contract.functions.getLastIndex(_validate_agent_id(agent_id), client).call())
+
+    def get_response_count(self, agent_id: str, client_address: str, feedback_index: int, responders: list[str] | None = None) -> int:
+        client = _checksum_addresses([client_address])[0]
+        if int(feedback_index) <= 0:
+            raise ValueError("feedback_index must be > 0")
+        return int(self.contract.functions.getResponseCount(_validate_agent_id(agent_id), client, int(feedback_index), _checksum_addresses(responders or [])).call())

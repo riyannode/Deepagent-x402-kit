@@ -1,18 +1,16 @@
+from __future__ import annotations
+
 REPUTATION_REGISTRY_ABI = [
-    {
-        "type": "function",
-        "name": "giveFeedback",
-        "stateMutability": "nonpayable",
-        "inputs": [
-            {"name": "agentId", "type": "uint256"},
-            {"name": "score", "type": "int128"},
-            {"name": "feedbackType", "type": "uint8"},
-            {"name": "tag", "type": "string"},
-            {"name": "metadataURI", "type": "string"},
-            {"name": "evidenceURI", "type": "string"},
-            {"name": "comment", "type": "string"},
-            {"name": "feedbackHash", "type": "bytes32"},
-        ],
-        "outputs": [],
-    }
+    {"type": "function", "name": "giveFeedback", "stateMutability": "nonpayable", "inputs": [{"name": "agentId", "type": "uint256"}, {"name": "value", "type": "int128"}, {"name": "valueDecimals", "type": "uint8"}, {"name": "tag1", "type": "string"}, {"name": "tag2", "type": "string"}, {"name": "endpoint", "type": "string"}, {"name": "feedbackURI", "type": "string"}, {"name": "feedbackHash", "type": "bytes32"}], "outputs": []},
+    {"type": "function", "name": "revokeFeedback", "stateMutability": "nonpayable", "inputs": [{"name": "agentId", "type": "uint256"}, {"name": "feedbackIndex", "type": "uint64"}], "outputs": []},
+    {"type": "function", "name": "appendResponse", "stateMutability": "nonpayable", "inputs": [{"name": "agentId", "type": "uint256"}, {"name": "clientAddress", "type": "address"}, {"name": "feedbackIndex", "type": "uint64"}, {"name": "responseURI", "type": "string"}, {"name": "responseHash", "type": "bytes32"}], "outputs": []},
+    {"type": "function", "name": "getSummary", "stateMutability": "view", "inputs": [{"name": "agentId", "type": "uint256"}, {"name": "clientAddresses", "type": "address[]"}, {"name": "tag1", "type": "string"}, {"name": "tag2", "type": "string"}], "outputs": [{"name": "count", "type": "uint64"}, {"name": "summaryValue", "type": "int128"}, {"name": "summaryValueDecimals", "type": "uint8"}]},
+    {"type": "function", "name": "readFeedback", "stateMutability": "view", "inputs": [{"name": "agentId", "type": "uint256"}, {"name": "clientAddress", "type": "address"}, {"name": "feedbackIndex", "type": "uint64"}], "outputs": [{"name": "value", "type": "int128"}, {"name": "valueDecimals", "type": "uint8"}, {"name": "tag1", "type": "string"}, {"name": "tag2", "type": "string"}, {"name": "isRevoked", "type": "bool"}]},
+    {"type": "function", "name": "readAllFeedback", "stateMutability": "view", "inputs": [{"name": "agentId", "type": "uint256"}, {"name": "clientAddresses", "type": "address[]"}, {"name": "tag1", "type": "string"}, {"name": "tag2", "type": "string"}, {"name": "includeRevoked", "type": "bool"}], "outputs": [{"name": "clients", "type": "address[]"}, {"name": "feedbackIndexes", "type": "uint64[]"}, {"name": "values", "type": "int128[]"}, {"name": "valueDecimals", "type": "uint8[]"}, {"name": "tag1s", "type": "string[]"}, {"name": "tag2s", "type": "string[]"}, {"name": "revokedStatuses", "type": "bool[]"}]},
+    {"type": "function", "name": "getResponseCount", "stateMutability": "view", "inputs": [{"name": "agentId", "type": "uint256"}, {"name": "clientAddress", "type": "address"}, {"name": "feedbackIndex", "type": "uint64"}, {"name": "responders", "type": "address[]"}], "outputs": [{"name": "count", "type": "uint64"}]},
+    {"type": "function", "name": "getClients", "stateMutability": "view", "inputs": [{"name": "agentId", "type": "uint256"}], "outputs": [{"name": "clients", "type": "address[]"}]},
+    {"type": "function", "name": "getLastIndex", "stateMutability": "view", "inputs": [{"name": "agentId", "type": "uint256"}, {"name": "clientAddress", "type": "address"}], "outputs": [{"name": "lastIndex", "type": "uint64"}]},
+    {"type": "event", "name": "NewFeedback", "anonymous": False, "inputs": [{"indexed": True, "name": "agentId", "type": "uint256"}, {"indexed": True, "name": "clientAddress", "type": "address"}, {"indexed": False, "name": "feedbackIndex", "type": "uint64"}, {"indexed": False, "name": "value", "type": "int128"}, {"indexed": False, "name": "valueDecimals", "type": "uint8"}, {"indexed": True, "name": "indexedTag1", "type": "string"}, {"indexed": False, "name": "tag1", "type": "string"}, {"indexed": False, "name": "tag2", "type": "string"}, {"indexed": False, "name": "endpoint", "type": "string"}, {"indexed": False, "name": "feedbackURI", "type": "string"}, {"indexed": False, "name": "feedbackHash", "type": "bytes32"}]},
+    {"type": "event", "name": "FeedbackRevoked", "anonymous": False, "inputs": [{"indexed": True, "name": "agentId", "type": "uint256"}, {"indexed": True, "name": "clientAddress", "type": "address"}, {"indexed": True, "name": "feedbackIndex", "type": "uint64"}]},
+    {"type": "event", "name": "ResponseAppended", "anonymous": False, "inputs": [{"indexed": True, "name": "agentId", "type": "uint256"}, {"indexed": True, "name": "clientAddress", "type": "address"}, {"indexed": False, "name": "feedbackIndex", "type": "uint64"}, {"indexed": True, "name": "responder", "type": "address"}, {"indexed": False, "name": "responseURI", "type": "string"}, {"indexed": False, "name": "responseHash", "type": "bytes32"}]},
 ]

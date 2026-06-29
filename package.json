@@ -5,7 +5,8 @@
   "description": "Node sidecar for Circle DCW contract execution and x402 payments.",
   "scripts": {
     "circle:execute": "node scripts/circle_execute_contract.mjs",
-    "x402:pay": "node scripts/x402_payment.mjs"
+    "x402:batching": "node scripts/x402_batching.mjs",
+    "x402:nano": "node scripts/x402_nano.mjs"
   },
   "dependencies": {
     "@circle-fin/developer-controlled-wallets": "10.6.0",
