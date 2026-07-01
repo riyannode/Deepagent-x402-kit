@@ -2,7 +2,7 @@
 
 Standalone SDK for Arc/Circle and single-wallet ERC-8004 + x402 DeepAgent built on **LangChain**.
 
-One Circle Developer-Controlled Wallet (DCW) = one on-chain ERC-8004 agent identity (ERC-721 NFT) on Arc Testnet. The Deep Agent can bootstrap its identity once via `register_identity_once`. Optional Circle x402 payment tools are policy-gated and off by default, you can turn it on for hit endpoint
+One Circle Developer-Controlled Wallet (DCW) = one on-chain ERC-8004 agent identity (ERC-721 NFT) on Arc Testnet. The Deep Agent can bootstrap its identity once via `register_identity_once`. Optional Circle x402 payment tools are policy-gated and disabled by default. Enable them only for approved endpoints through the host allowlist and x402 exposure flags.
 
 **Built on LangChain / Deep Agents.** The agent logic, tools, system prompt, and LLM routing are all standard LangChain — you can fork this repo and modify the agent behavior, add tools, change the model, swap the system prompt, or integrate it into any LangChain-compatible pipeline. The SDK provides building blocks, not a black box.
 
@@ -11,7 +11,7 @@ One Circle Developer-Controlled Wallet (DCW) = one on-chain ERC-8004 agent ident
 ## Architecture
 
 ```
-Deepagent-x402-kit/
+deepagent-x402-kit/
 ├── src/erc8004_deepagent_kit/
 │   ├── agent.py                  # LangChain Deep Agent builder (tools + system prompt)
 │   ├── cli.py                    # CLI: doctor, status, register, config, reputation commands
@@ -432,13 +432,43 @@ erc8004-deepagent reputation-index-status # No LLM needed
 
 ---
 
+## Install
+
+This package is not published to PyPI yet.
+
+Recommended local setup:
+
+```bash
+git clone https://github.com/riyannode/deepagent-x402-kit.git
+cd deepagent-x402-kit
+bash setup.sh
+```
+
+Install directly from GitHub:
+
+```bash
+pip install "git+https://github.com/riyannode/deepagent-x402-kit.git"
+```
+
+For reproducible installs, pin a commit:
+
+```bash
+pip install "git+https://github.com/riyannode/deepagent-x402-kit.git@<commit-sha>"
+```
+
+Python package name: `erc8004-deepagent-kit`
+
+CLI command: `erc8004-deepagent doctor`
+
+---
+
 ## Quick Start
 
 **Local (one command):**
 
 ```bash
-git clone https://github.com/riyannode/Deepagent-x402-kit.git
-cd Deepagent-x402-kit
+git clone https://github.com/riyannode/deepagent-x402-kit.git
+cd deepagent-x402-kit
 bash setup.sh
 ```
 
@@ -453,8 +483,8 @@ erc8004-deepagent register
 **Docker:**
 
 ```bash
-git clone https://github.com/riyannode/Deepagent-x402-kit.git
-cd Deepagent-x402-kit
+git clone https://github.com/riyannode/deepagent-x402-kit.git
+cd deepagent-x402-kit
 cp .env.example .env   # edit with your credentials
 make build              # docker compose build
 make doctor             # validate everything
